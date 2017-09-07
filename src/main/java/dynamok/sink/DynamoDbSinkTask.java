@@ -17,16 +17,13 @@
 package dynamok.sink;
 
 import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
+import com.amazonaws.auth.InstanceProfileCredentialsProvider;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient;
-import com.amazonaws.services.dynamodbv2.model.AmazonDynamoDBException;
-import com.amazonaws.services.dynamodbv2.model.AttributeValue;
-import com.amazonaws.services.dynamodbv2.model.BatchWriteItemRequest;
-import com.amazonaws.services.dynamodbv2.model.BatchWriteItemResult;
-import com.amazonaws.services.dynamodbv2.model.LimitExceededException;
-import com.amazonaws.services.dynamodbv2.model.ProvisionedThroughputExceededException;
-import com.amazonaws.services.dynamodbv2.model.PutRequest;
-import com.amazonaws.services.dynamodbv2.model.WriteRequest;
+import com.amazonaws.services.dynamodbv2.model.*;
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dynamok.Version;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -39,12 +36,7 @@ import org.apache.kafka.connect.sink.SinkTask;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 
 public class DynamoDbSinkTask extends SinkTask {
@@ -67,6 +59,7 @@ public class DynamoDbSinkTask extends SinkTask {
     }
 
     private final Logger log = LoggerFactory.getLogger(DynamoDbSinkTask.class);
+    private ObjectMapper objectMapper = new ObjectMapper();
 
     private ConnectorConfig config;
     private AmazonDynamoDBClient client;
@@ -77,7 +70,7 @@ public class DynamoDbSinkTask extends SinkTask {
         config = new ConnectorConfig(props);
 
         if (config.accessKeyId.value().isEmpty() || config.secretKey.value().isEmpty()) {
-            client = new AmazonDynamoDBClient(DefaultAWSCredentialsProviderChain.getInstance());
+            client = new AmazonDynamoDBClient(InstanceProfileCredentialsProvider.getInstance());
             log.debug("AmazonDynamoDBStreamsClient created with DefaultAWSCredentialsProviderChain");
         } else {
             final BasicAWSCredentials awsCreds = new BasicAWSCredentials(config.accessKeyId.value(), config.secretKey.value());
@@ -96,7 +89,21 @@ public class DynamoDbSinkTask extends SinkTask {
         try {
             if (records.size() == 1 || config.batchSize == 1) {
                 for (final SinkRecord record : records) {
-                    client.putItem(tableName(record), toPutRequest(record).getItem());
+                    Map<String, Object> map;
+                    try {
+                        map = objectMapper.readValue(record.value().toString(), new TypeReference<Map<String, String>>() {
+                        });
+                        SinkRecord newRecord = new SinkRecord(record.topic(), record.kafkaPartition(), null,
+                                record.key(), null, map, record.kafkaOffset());
+                        client.putItem(tableName(record), toPutRequest(newRecord).getItem());
+                    } catch (JsonParseException | JsonMappingException e) {
+                        log.error("Exception occurred while converting JSON to Map: {} \n{}\n{}", record, e.getLocalizedMessage(), Arrays.toString(e.getStackTrace()));
+                    } catch (AmazonDynamoDBException e) {
+                        log.error("Exception in writing into DynamoDB: {} \n{}\n{}", record, e.getLocalizedMessage(), Arrays.toString(e.getStackTrace()));
+                        throw e;
+                    } catch (Exception e) {
+                        log.error("Unknown Exception occurred: {}\n{}", e.getLocalizedMessage(), Arrays.toString(e.getStackTrace()));
+                    }
                 }
             } else {
                 final Iterator<SinkRecord> recordIterator = records.iterator();
@@ -115,7 +122,8 @@ public class DynamoDbSinkTask extends SinkTask {
         } catch (AmazonDynamoDBException | UnprocessedItemsException e) {
             log.warn("Write failed, remainingRetries={}", 0, remainingRetries, e);
             if (remainingRetries == 0) {
-                throw new ConnectException(e);
+                ArrayList<SinkRecord> list = new ArrayList<>(records);
+                log.error("Unable to process this range from: {}\n\t\t\t\t\t\t\tto: {}", list.get(0), list.get(list.size() - 1));
             } else {
                 remainingRetries--;
                 context.timeout(config.retryBackoffMs);

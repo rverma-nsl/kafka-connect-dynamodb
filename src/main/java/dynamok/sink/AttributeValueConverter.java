@@ -148,10 +148,13 @@ public class AttributeValueConverter {
             final Map<?, ?> sourceMap = (Map) value;
             final Map<String, AttributeValue> attributesMap = new HashMap<>(sourceMap.size());
             for (Map.Entry<?, ?> e : sourceMap.entrySet()) {
-                attributesMap.put(
-                        primitiveAsString(e.getKey()),
-                        toAttributeValueSchemaless(e.getValue())
-                );
+                //Ignoring null & empty strings
+                if(e.getValue() != null && (!(e.getValue() instanceof String) || e.getValue() != "")) {
+                    attributesMap.put(
+                            primitiveAsString(e.getKey()),
+                            toAttributeValueSchemaless(e.getValue())
+                    );
+                }
             }
             return new AttributeValue().withM(attributesMap);
         }
