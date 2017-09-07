@@ -97,12 +97,12 @@ public class DynamoDbSinkTask extends SinkTask {
                                 record.key(), null, map, record.kafkaOffset());
                         client.putItem(tableName(record), toPutRequest(newRecord).getItem());
                     } catch (JsonParseException | JsonMappingException e) {
-                        log.error("Exception occurred while converting JSON to Map: {} \n{}\n{}", record, e.getLocalizedMessage(), Arrays.toString(e.getStackTrace()));
+                        log.error("Exception occurred while converting JSON to Map: {}", record, e);
                     } catch (AmazonDynamoDBException e) {
-                        log.error("Exception in writing into DynamoDB: {} \n{}\n{}", record, e.getLocalizedMessage(), Arrays.toString(e.getStackTrace()));
+                        log.error("Exception in writing into DynamoDB: {}", record, e);
                         throw e;
                     } catch (Exception e) {
-                        log.error("Unknown Exception occurred: {}\n{}", e.getLocalizedMessage(), Arrays.toString(e.getStackTrace()));
+                        log.error("Unknown Exception occurred:", e);
                     }
                 }
             } else {
@@ -120,7 +120,7 @@ public class DynamoDbSinkTask extends SinkTask {
             context.timeout(config.retryBackoffMs);
             throw new RetriableException(e);
         } catch (AmazonDynamoDBException | UnprocessedItemsException e) {
-            log.warn("Write failed, remainingRetries={}", 0, remainingRetries, e);
+            log.warn("Write failed, remainingRetries={}", remainingRetries, e);
             if (remainingRetries == 0) {
                 ArrayList<SinkRecord> list = new ArrayList<>(records);
                 log.error("Unable to process this range from: {}\n\t\t\t\t\t\t\tto: {}", list.get(0), list.get(list.size() - 1));
