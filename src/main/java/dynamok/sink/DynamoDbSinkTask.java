@@ -26,7 +26,11 @@ import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dynamok.Version;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
@@ -63,11 +67,13 @@ public class DynamoDbSinkTask extends SinkTask {
 
     private ConnectorConfig config;
     private AmazonDynamoDBClient client;
+    private KafkaProducer<String, String> producer;
     private int remainingRetries;
 
     @Override
     public void start(Map<String, String> props) {
         config = new ConnectorConfig(props);
+        producer = getKafkaProducer();
 
         if (config.accessKeyId.value().isEmpty() || config.secretKey.value().isEmpty()) {
             client = new AmazonDynamoDBClient(InstanceProfileCredentialsProvider.getInstance());
@@ -89,6 +95,8 @@ public class DynamoDbSinkTask extends SinkTask {
         try {
             if (records.size() == 1 || config.batchSize == 1) {
                 for (final SinkRecord record : records) {
+                    ProducerRecord<String, String> producerRecord = new ProducerRecord<>(config.errorKafkaTopic,
+                            "" + record.key(), record.value().toString());
                     Map<String, Object> map;
                     try {
                         map = objectMapper.readValue(record.value().toString(), new TypeReference<Map<String, String>>() {
@@ -98,11 +106,14 @@ public class DynamoDbSinkTask extends SinkTask {
                         client.putItem(tableName(record), toPutRequest(newRecord).getItem());
                     } catch (JsonParseException | JsonMappingException e) {
                         log.error("Exception occurred while converting JSON to Map: {}", record, e);
+                        log.info("Sending to error topic...");
+                        producer.send(producerRecord);
                     } catch (AmazonDynamoDBException e) {
                         log.error("Exception in writing into DynamoDB: {}", record, e);
                         throw e;
                     } catch (Exception e) {
                         log.error("Unknown Exception occurred:", e);
+                        producer.send(producerRecord);
                     }
                 }
             } else {
@@ -124,6 +135,12 @@ public class DynamoDbSinkTask extends SinkTask {
             if (remainingRetries == 0) {
                 ArrayList<SinkRecord> list = new ArrayList<>(records);
                 log.error("Unable to process this range from: {}\n\t\t\t\t\t\t\tto: {}", list.get(0), list.get(list.size() - 1));
+                log.info("Writing to error kafka topic: {}", config.errorKafkaTopic);
+                list.forEach(record -> {
+                    ProducerRecord<String, String> producerRecord = new ProducerRecord<>(config.errorKafkaTopic,
+                            "" + record.key(), record.value().toString());
+                    producer.send(producerRecord);
+                });
             } else {
                 remainingRetries--;
                 context.timeout(config.retryBackoffMs);
@@ -200,6 +217,17 @@ public class DynamoDbSinkTask extends SinkTask {
     @Override
     public String version() {
         return Version.get();
+    }
+
+    private KafkaProducer<String, String> getKafkaProducer() {
+        Properties props = new Properties();
+        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, config.broker);
+        props.put(ProducerConfig.CLIENT_ID_CONFIG, "Dynamo Sink Connector Error Pipeline");
+        props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
+                StringSerializer.class.getName());
+        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
+                StringSerializer.class.getName());
+        return new KafkaProducer<>(props);
     }
 
 }
