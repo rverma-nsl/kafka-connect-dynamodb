@@ -86,7 +86,7 @@ class ConnectorConfig extends AbstractConfig {
             .define(Keys.BROKER, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE,
                     ConfigDef.Importance.HIGH, "Brokers address where Kafka error pipeline will work.")
             .define(Keys.ERROR_KAFKA_TOPIC, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE,
-                    ConfigDef.Importance.HIGH, "Error Kafka topic name.");
+                    ConfigDef.Importance.HIGH, "Error kafka topic name.");
 
     final Regions region;
     final Password accessKeyId;

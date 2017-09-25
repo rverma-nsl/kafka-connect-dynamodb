@@ -16,21 +16,21 @@
 
 package dynamok.sink;
 
+import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.auth.InstanceProfileCredentialsProvider;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
 import com.amazonaws.services.dynamodbv2.model.*;
 import com.fasterxml.jackson.core.JsonParseException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonMappingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import dynamok.Version;
+import dynamok.commons.Util;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
@@ -40,6 +40,7 @@ import org.apache.kafka.connect.sink.SinkTask;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.*;
 
 
@@ -63,92 +64,62 @@ public class DynamoDbSinkTask extends SinkTask {
     }
 
     private final Logger log = LoggerFactory.getLogger(DynamoDbSinkTask.class);
-    private ObjectMapper objectMapper = new ObjectMapper();
 
     private ConnectorConfig config;
-    private AmazonDynamoDBClient client;
+    private AmazonDynamoDB client;
     private KafkaProducer<String, String> producer;
-    private int remainingRetries;
 
     @Override
     public void start(Map<String, String> props) {
         config = new ConnectorConfig(props);
-        producer = getKafkaProducer();
+        producer = Util.getKafkaProducer(config.broker);
 
         if (config.accessKeyId.value().isEmpty() || config.secretKey.value().isEmpty()) {
-            client = new AmazonDynamoDBClient(InstanceProfileCredentialsProvider.getInstance());
+            client = AmazonDynamoDBClientBuilder
+                    .standard()
+                    .withCredentials(InstanceProfileCredentialsProvider.getInstance())
+                    .withRegion(config.region)
+                    .build();
             log.debug("AmazonDynamoDBStreamsClient created with DefaultAWSCredentialsProviderChain");
         } else {
             final BasicAWSCredentials awsCreds = new BasicAWSCredentials(config.accessKeyId.value(), config.secretKey.value());
-            client = new AmazonDynamoDBClient(awsCreds);
+            client = AmazonDynamoDBClientBuilder
+                    .standard()
+                    .withCredentials(new AWSStaticCredentialsProvider(awsCreds))
+                    .withRegion(config.region)
+                    .build();
             log.debug("AmazonDynamoDBClient created with AWS credentials from connector configuration");
         }
-
-        client.configureRegion(config.region);
-        remainingRetries = config.maxRetries;
     }
 
     @Override
     public void put(Collection<SinkRecord> records) {
         if (records.isEmpty()) return;
 
-        try {
-            if (records.size() == 1 || config.batchSize == 1) {
-                for (final SinkRecord record : records) {
-                    ProducerRecord<String, String> producerRecord = new ProducerRecord<>(config.errorKafkaTopic,
-                            "" + record.key(), record.value().toString());
-                    Map<String, Object> map;
-                    try {
-                        map = objectMapper.readValue(record.value().toString(), new TypeReference<Map<String, String>>() {
-                        });
-                        SinkRecord newRecord = new SinkRecord(record.topic(), record.kafkaPartition(), null,
-                                record.key(), null, map, record.kafkaOffset());
-                        client.putItem(tableName(record), toPutRequest(newRecord).getItem());
-                    } catch (JsonParseException | JsonMappingException e) {
-                        log.error("Exception occurred while converting JSON to Map: {}", record, e);
-                        log.info("Sending to error topic...");
-                        producer.send(producerRecord);
-                    } catch (AmazonDynamoDBException e) {
-                        log.error("Exception in writing into DynamoDB: {}", record, e);
-                        throw e;
-                    } catch (Exception e) {
-                        log.error("Unknown Exception occurred:", e);
-                        producer.send(producerRecord);
-                    }
-                }
-            } else {
-                final Iterator<SinkRecord> recordIterator = records.iterator();
-                while (recordIterator.hasNext()) {
-                    final Map<String, List<WriteRequest>> writesByTable = toWritesByTable(recordIterator);
-                    final BatchWriteItemResult batchWriteResponse = client.batchWriteItem(new BatchWriteItemRequest(writesByTable));
-                    if (!batchWriteResponse.getUnprocessedItems().isEmpty()) {
-                        throw new UnprocessedItemsException(batchWriteResponse.getUnprocessedItems());
-                    }
-                }
-            }
-        } catch (LimitExceededException | ProvisionedThroughputExceededException e) {
-            log.debug("Write failed with Limit/Throughput Exceeded exception; backing off");
-            context.timeout(config.retryBackoffMs);
-            throw new RetriableException(e);
-        } catch (AmazonDynamoDBException | UnprocessedItemsException e) {
-            log.warn("Write failed, remainingRetries={}", remainingRetries, e);
-            if (remainingRetries == 0) {
-                ArrayList<SinkRecord> list = new ArrayList<>(records);
-                log.error("Unable to process this range from: {}\n\t\t\t\t\t\t\tto: {}", list.get(0), list.get(list.size() - 1));
-                log.info("Writing to error kafka topic: {}", config.errorKafkaTopic);
-                list.forEach(record -> {
-                    ProducerRecord<String, String> producerRecord = new ProducerRecord<>(config.errorKafkaTopic,
-                            "" + record.key(), record.value().toString());
-                    producer.send(producerRecord);
-                });
-            } else {
-                remainingRetries--;
+        for (final SinkRecord record : records) {
+            ProducerRecord<String, String> producerRecord = new ProducerRecord<>(config.errorKafkaTopic,
+                    "" + record.key(), record.value().toString());
+            try {
+                SinkRecord newRecord = new SinkRecord(record.topic(), record.kafkaPartition(), null,
+                        record.key(), null, Util.jsonToMap(record.value().toString()), record.kafkaOffset());
+                client.putItem(tableName(record), toPutRequest(newRecord).getItem());
+            } catch (JsonParseException | JsonMappingException e) {
+                log.error("Exception occurred while converting JSON to Map: {}", record, e);
+                log.info("Sending to error topic...");
+                producer.send(producerRecord);
+            } catch (LimitExceededException | ProvisionedThroughputExceededException e) {
+                log.debug("Write failed with Limit/Throughput Exceeded exception; backing off");
                 context.timeout(config.retryBackoffMs);
                 throw new RetriableException(e);
+            } catch (IOException e) {
+                log.error("Exception occurred in Json Parsing ", e);
+                producer.send(producerRecord);
+            } catch(AmazonDynamoDBException e) {
+                if (e.getErrorCode().equalsIgnoreCase( "ValidationException")) {
+                    producer.send(producerRecord);
+                } else throw e;
             }
         }
-
-        remainingRetries = config.maxRetries;
     }
 
     private Map<String, List<WriteRequest>> toWritesByTable(Iterator<SinkRecord> recordIterator) {
@@ -217,17 +188,6 @@ public class DynamoDbSinkTask extends SinkTask {
     @Override
     public String version() {
         return Version.get();
-    }
-
-    private KafkaProducer<String, String> getKafkaProducer() {
-        Properties props = new Properties();
-        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, config.broker);
-        props.put(ProducerConfig.CLIENT_ID_CONFIG, "Dynamo Sink Connector Error Pipeline");
-        props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
-                StringSerializer.class.getName());
-        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
-                StringSerializer.class.getName());
-        return new KafkaProducer<>(props);
     }
 
 }
