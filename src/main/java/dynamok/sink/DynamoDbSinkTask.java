@@ -20,7 +20,6 @@ import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.auth.InstanceProfileCredentialsProvider;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
 import com.amazonaws.services.dynamodbv2.model.*;
 import com.fasterxml.jackson.core.JsonParseException;
@@ -105,17 +104,18 @@ public class DynamoDbSinkTask extends SinkTask {
                 client.putItem(tableName(record), toPutRequest(newRecord).getItem());
             } catch (JsonParseException | JsonMappingException e) {
                 log.error("Exception occurred while converting JSON to Map: {}", record, e);
-                log.info("Sending to error topic...");
+                log.warn("Sending to error topic...");
                 producer.send(producerRecord);
             } catch (LimitExceededException | ProvisionedThroughputExceededException e) {
                 log.debug("Write failed with Limit/Throughput Exceeded exception; backing off");
                 context.timeout(config.retryBackoffMs);
                 throw new RetriableException(e);
             } catch (IOException e) {
-                log.error("Exception occurred in Json Parsing ", e);
+                log.error("Exception occurred in Json Parsing", e);
                 producer.send(producerRecord);
-            } catch(AmazonDynamoDBException e) {
-                if (e.getErrorCode().equalsIgnoreCase( "ValidationException")) {
+            } catch (AmazonDynamoDBException e) {
+                log.warn("Error in sending data to DynamoDB in record: {}", record, e);
+                if (e.getErrorCode().equalsIgnoreCase("ValidationException")) {
                     producer.send(producerRecord);
                 } else throw e;
             }
