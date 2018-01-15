@@ -40,7 +40,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.Collection;
+import java.util.Map;
 
 
 public class DynamoDbSinkTask extends SinkTask {
@@ -99,9 +100,19 @@ public class DynamoDbSinkTask extends SinkTask {
             ProducerRecord<String, String> producerRecord = new ProducerRecord<>(config.errorKafkaTopic,
                     "" + record.key(), record.value().toString());
             try {
+                Map<String, Object> valueMap = Util.jsonToMap(record.value().toString());
+                DynamoConnectMetaData dynamoConnectMetaData = null;
                 SinkRecord newRecord = new SinkRecord(record.topic(), record.kafkaPartition(), null,
-                        record.key(), null, Util.jsonToMap(record.value().toString()), record.kafkaOffset());
-                client.putItem(tableName(record), toPutRequest(newRecord).getItem());
+                        record.key(), null, valueMap, record.kafkaOffset());
+                PutItemRequest putItemRequest = toPutRequest(newRecord).withTableName(tableName(newRecord));
+                if (valueMap.containsKey("__metadata")) {
+                    Map<String, Object> metadata = (Map<String, Object>) valueMap.get("__metadata");
+                    dynamoConnectMetaData = Util.mapToDynamoConnectMetaData(metadata);
+                    putItemRequest = putItemRequest
+                            .withConditionExpression(dynamoConnectMetaData.getConditionalExpression())
+                            .withExpressionAttributeValues(AttributeValueConverter.toAttributeValueSchemaless(dynamoConnectMetaData.getConditionalValueMap()).getM());
+                }
+                client.putItem(putItemRequest);
             } catch (JsonParseException | JsonMappingException e) {
                 log.error("Exception occurred while converting JSON to Map: {}", record, e);
                 log.warn("Sending to error topic...");
@@ -110,6 +121,9 @@ public class DynamoDbSinkTask extends SinkTask {
                 log.debug("Write failed with Limit/Throughput Exceeded exception; backing off");
                 context.timeout(config.retryBackoffMs);
                 throw new RetriableException(e);
+            } catch (ConditionalCheckFailedException e) {
+                log.debug("Conditional check failed for record: {}", record, e);
+                //This is intentional failure for conditional check
             } catch (IOException e) {
                 log.error("Exception occurred in Json Parsing", e);
                 producer.send(producerRecord);
@@ -122,33 +136,23 @@ public class DynamoDbSinkTask extends SinkTask {
         }
     }
 
-    private Map<String, List<WriteRequest>> toWritesByTable(Iterator<SinkRecord> recordIterator) {
-        final Map<String, List<WriteRequest>> writesByTable = new HashMap<>();
-        for (int count = 0; recordIterator.hasNext() && count < config.batchSize; count++) {
-            final SinkRecord record = recordIterator.next();
-            final WriteRequest writeRequest = new WriteRequest(toPutRequest(record));
-            writesByTable.computeIfAbsent(tableName(record), k -> new ArrayList<>(config.batchSize)).add(writeRequest);
-        }
-        return writesByTable;
-    }
-
-    private PutRequest toPutRequest(SinkRecord record) {
-        final PutRequest put = new PutRequest();
+    private PutItemRequest toPutRequest(SinkRecord record) {
+        final PutItemRequest pir = new PutItemRequest();
         if (!config.ignoreRecordValue) {
-            insert(ValueSource.RECORD_VALUE, record.valueSchema(), record.value(), put);
+            insert(ValueSource.RECORD_VALUE, record.valueSchema(), record.value(), pir);
         }
         if (!config.ignoreRecordKey) {
-            insert(ValueSource.RECORD_KEY, record.keySchema(), record.key(), put);
+            insert(ValueSource.RECORD_KEY, record.keySchema(), record.key(), pir);
         }
         if (config.kafkaCoordinateNames != null) {
-            put.addItemEntry(config.kafkaCoordinateNames.topic, new AttributeValue().withS(record.topic()));
-            put.addItemEntry(config.kafkaCoordinateNames.partition, new AttributeValue().withN(String.valueOf(record.kafkaPartition())));
-            put.addItemEntry(config.kafkaCoordinateNames.offset, new AttributeValue().withN(String.valueOf(record.kafkaOffset())));
+            pir.addItemEntry(config.kafkaCoordinateNames.topic, new AttributeValue().withS(record.topic()));
+            pir.addItemEntry(config.kafkaCoordinateNames.partition, new AttributeValue().withN(String.valueOf(record.kafkaPartition())));
+            pir.addItemEntry(config.kafkaCoordinateNames.offset, new AttributeValue().withN(String.valueOf(record.kafkaOffset())));
         }
-        return put;
+        return pir;
     }
 
-    private void insert(ValueSource valueSource, Schema schema, Object value, PutRequest put) {
+    private void insert(ValueSource valueSource, Schema schema, Object value, PutItemRequest pir) {
         final AttributeValue attributeValue;
         try {
             attributeValue = schema == null
@@ -161,9 +165,9 @@ public class DynamoDbSinkTask extends SinkTask {
 
         final String topAttributeName = valueSource.topAttributeName(config);
         if (!topAttributeName.isEmpty()) {
-            put.addItemEntry(topAttributeName, attributeValue);
+            pir.addItemEntry(topAttributeName, attributeValue);
         } else if (attributeValue.getM() != null) {
-            put.setItem(attributeValue.getM());
+            pir.setItem(attributeValue.getM());
         } else {
             throw new ConnectException("No top attribute name configured for " + valueSource + ", and it could not be converted to Map: " + attributeValue);
         }

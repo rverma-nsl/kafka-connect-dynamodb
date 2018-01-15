@@ -2,6 +2,7 @@ package dynamok.commons;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dynamok.sink.DynamoConnectMetaData;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringSerializer;
@@ -30,6 +31,10 @@ public class Util {
     }
 
     public static Map<String, Object> jsonToMap(String json) throws IOException {
-        return objectMapper.readValue(json, new TypeReference<Map<String, String>>() {});
+        return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+    }
+
+    public static DynamoConnectMetaData mapToDynamoConnectMetaData(Map<String, Object> map) {
+        return objectMapper.convertValue(map, DynamoConnectMetaData.class);
     }
 }
