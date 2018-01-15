@@ -150,7 +150,7 @@ public class AttributeValueConverter {
             for (Map.Entry<?, ?> e : sourceMap.entrySet()) {
                 //Ignoring null & empty strings and keys starting with __
                 if(e.getValue() != null && (!(e.getValue() instanceof String) || e.getValue() != "") &&
-                        e.getKey() != null &&(!(e.getKey() instanceof String) || ((String) e.getKey()).startsWith("__"))) {
+                        e.getKey() != null &&(!(e.getKey() instanceof String) || !((String) e.getKey()).startsWith("__"))) {
                     attributesMap.put(
                             primitiveAsString(e.getKey()),
                             toAttributeValueSchemaless(e.getValue())
