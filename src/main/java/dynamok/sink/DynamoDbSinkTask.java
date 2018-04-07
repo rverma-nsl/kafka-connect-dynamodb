@@ -131,7 +131,10 @@ public class DynamoDbSinkTask extends SinkTask {
                 log.warn("Error in sending data to DynamoDB in record: {}", record, e);
                 if (e.getErrorCode().equalsIgnoreCase("ValidationException")) {
                     producer.send(producerRecord);
-                } else throw e;
+                } else {
+                    System.exit(1); // To exit connect completely
+                    throw e;
+                }
             }
         }
     }
