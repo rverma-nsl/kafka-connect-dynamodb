@@ -22,6 +22,9 @@ import com.amazonaws.auth.InstanceProfileCredentialsProvider;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
 import com.amazonaws.services.dynamodbv2.model.*;
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.Meter;
+import com.codahale.metrics.Timer;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import dynamok.Version;
@@ -45,6 +48,11 @@ import java.util.Map;
 
 
 public class DynamoDbSinkTask extends SinkTask {
+
+    private final Meter requests = DynamoDbSinkConnector.metricRegistry.meter("Requests");
+    private final Counter jsonParseException = DynamoDbSinkConnector.metricRegistry.counter("JsonParseException");
+    private final Counter conditionalCheckFailed = DynamoDbSinkConnector.metricRegistry.counter("ConditionalCheckFailed");
+    private final Timer requestProcessingTimer = DynamoDbSinkConnector.metricRegistry.timer("RequestProcessingTime");
 
     private enum ValueSource {
         RECORD_KEY {
@@ -94,9 +102,10 @@ public class DynamoDbSinkTask extends SinkTask {
 
     @Override
     public void put(Collection<SinkRecord> records) {
-        if (records.isEmpty()) return;
+        requests.mark(records.size());
 
         for (final SinkRecord record : records) {
+            Timer.Context timerContext = requestProcessingTimer.time();
             ProducerRecord<String, String> producerRecord = new ProducerRecord<>(config.errorKafkaTopic,
                     "" + record.key(), record.value().toString());
             try {
@@ -114,6 +123,7 @@ public class DynamoDbSinkTask extends SinkTask {
                 }
                 client.putItem(putItemRequest);
             } catch (JsonParseException | JsonMappingException e) {
+                jsonParseException.inc();
                 log.error("Exception occurred while converting JSON to Map: {}", record, e);
                 log.warn("Sending to error topic...");
                 producer.send(producerRecord);
@@ -122,6 +132,7 @@ public class DynamoDbSinkTask extends SinkTask {
                 context.timeout(config.retryBackoffMs);
                 throw new RetriableException(e);
             } catch (ConditionalCheckFailedException e) {
+                conditionalCheckFailed.inc();
                 log.debug("Conditional check failed for record: {}", record, e);
                 //This is intentional failure for conditional check
             } catch (IOException e) {
@@ -133,8 +144,9 @@ public class DynamoDbSinkTask extends SinkTask {
                     producer.send(producerRecord);
                 } else {
                     System.exit(1); // To exit connect completely
-                    throw e;
                 }
+            } finally {
+                timerContext.stop();
             }
         }
     }

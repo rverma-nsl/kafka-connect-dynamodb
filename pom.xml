@@ -28,6 +28,8 @@
         <junit.version>4.12</junit.version>
         <slf4j.version>1.7.5</slf4j.version>
         <aws.version>1.11.188</aws.version>
+        <jackson.version>2.9.0</jackson.version>
+        <dropwizard.version>3.1.0</dropwizard.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -69,8 +71,13 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>2.9.0</version>
+            <version>${jackson.version}</version>
         </dependency>
+            <dependency>
+                <groupId>io.dropwizard.metrics</groupId>
+                <artifactId>metrics-core</artifactId>
+                <version>${dropwizard.version}</version>
+            </dependency>
     </dependencies>
 
     <build>
