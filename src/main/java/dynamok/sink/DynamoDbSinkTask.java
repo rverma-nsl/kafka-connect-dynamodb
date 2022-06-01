@@ -78,6 +78,8 @@ public class DynamoDbSinkTask extends SinkTask {
     private DynamoDbClient client;
     private KafkaProducer<String, String> producer;
 
+    private Map<String, String> tableMap = new HashMap<>();
+
     @Override
     public void start(Map<String, String> props) {
         config = new ConnectorConfig(props);
@@ -93,6 +95,10 @@ public class DynamoDbSinkTask extends SinkTask {
             log.debug("AmazonDynamoDBClient created with AWS credentials from connector configuration");
         }
         client = ddb.build();
+        for (String spl : config.tableFormat.split(",")) {
+            String[] e = spl.split("=");
+            tableMap.put(e[0], e[1]);
+        }
     }
 
     @Override
@@ -185,7 +191,8 @@ public class DynamoDbSinkTask extends SinkTask {
     }
 
     private String tableName(SinkRecord record) {
-        return config.tableFormat.equalsIgnoreCase("${topic}") ? config.tableFormat.replace("${topic}", record.topic()):config.tableFormat;
+        return tableMap.get(record.topic());
+//        return config.tableFormat.equalsIgnoreCase("${topic}") ? config.tableFormat.replace("${topic}", record.topic()) : config.tableFormat;
     }
 
     @Override

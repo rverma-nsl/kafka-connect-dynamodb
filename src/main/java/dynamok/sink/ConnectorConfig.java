@@ -59,7 +59,14 @@ class ConnectorConfig extends AbstractConfig {
                     ConfigDef.Importance.LOW, "Explicit AWS secret access key. " +
                             "Leave empty to utilize the default credential provider chain.")
             .define(Keys.TABLE_FORMAT, ConfigDef.Type.STRING, "${topic}",
-                    ConfigDef.Importance.HIGH, "Format string for destination DynamoDB table name, use ``${topic}`` as placeholder for source topic.")
+                    (key, tables) -> {
+                        for (String spl : tables.toString().split(",")) {
+                            String[] e = spl.split("=");
+                            if (e.length != 2) {
+                                throw new ConfigException("Configuration tableFormat excepts topic=tablename format");
+                            }
+                        }
+                    }, ConfigDef.Importance.HIGH, "Format string for destination DynamoDB table name, use topic=tableName comma separated")
             .define(Keys.BATCH_SIZE, ConfigDef.Type.INT, 1, ConfigDef.Range.between(1, 25),
                     ConfigDef.Importance.HIGH, "Batch size between 1 (dedicated ``PutItemRequest`` for each record) and 25 (which is the maximum number of items in a ``BatchWriteItemRequest``)")
             .define(Keys.KAFKA_ATTRIBUTES, ConfigDef.Type.LIST, "kafka_topic,kafka_partition,kafka_offset", (key, names) -> {
