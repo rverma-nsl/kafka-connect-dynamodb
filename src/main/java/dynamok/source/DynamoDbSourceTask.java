@@ -16,26 +16,19 @@
 
 package dynamok.source;
 
-import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDBStreamsClient;
-import com.amazonaws.services.dynamodbv2.model.GetRecordsRequest;
-import com.amazonaws.services.dynamodbv2.model.GetRecordsResult;
-import com.amazonaws.services.dynamodbv2.model.GetShardIteratorRequest;
-import com.amazonaws.services.dynamodbv2.model.ShardIteratorType;
-import com.amazonaws.services.dynamodbv2.model.StreamRecord;
 import dynamok.Version;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.apache.kafka.connect.source.SourceTask;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.services.dynamodb.model.*;
+import software.amazon.awssdk.services.dynamodb.streams.DynamoDbStreamsClient;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class DynamoDbSourceTask extends SourceTask {
@@ -50,7 +43,7 @@ public class DynamoDbSourceTask extends SourceTask {
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     private TaskConfig config;
-    private AmazonDynamoDBStreamsClient streamsClient;
+    private DynamoDbStreamsClient streamsClient;
 
     private List<String> assignedShards;
     private Map<String, String> shardIterators;
@@ -61,15 +54,13 @@ public class DynamoDbSourceTask extends SourceTask {
         config = new TaskConfig(props);
 
         if (config.accessKeyId.isEmpty() || config.secretKey.isEmpty()) {
-            streamsClient = new AmazonDynamoDBStreamsClient(DefaultAWSCredentialsProviderChain.getInstance());
+            streamsClient = DynamoDbStreamsClient.builder().region(config.region).build();
             log.debug("AmazonDynamoDBStreamsClient created with DefaultAWSCredentialsProviderChain");
         } else {
-            final BasicAWSCredentials awsCreds = new BasicAWSCredentials(config.accessKeyId, config.secretKey);
-            streamsClient = new AmazonDynamoDBStreamsClient(awsCreds);
-            log.debug("AmazonDynamoDBStreamsClient created with AWS credentials from connector configuration");
+            final AwsCredentials awsCreds = AwsBasicCredentials.create(config.accessKeyId, config.secretKey);
+            streamsClient = DynamoDbStreamsClient.builder().region(config.region).credentialsProvider(StaticCredentialsProvider.create(awsCreds)).build();
+            log.debug("AmazonDynamoDB clients created with AWS credentials from connector configuration");
         }
-
-        streamsClient.configureRegion(config.region);
 
         assignedShards = new ArrayList<>(config.shards);
         shardIterators = new HashMap<>(assignedShards.size());
@@ -77,7 +68,7 @@ public class DynamoDbSourceTask extends SourceTask {
     }
 
     @Override
-    public List<SourceRecord> poll() throws InterruptedException {
+    public List<SourceRecord> poll() {
         // TODO rate limiting?
 
         if (assignedShards.isEmpty()) {
@@ -86,18 +77,16 @@ public class DynamoDbSourceTask extends SourceTask {
 
         final String shardId = assignedShards.get(currentShardIdx);
 
-        final GetRecordsRequest req = new GetRecordsRequest();
-        req.setShardIterator(shardIterator(shardId));
-        req.setLimit(100); // TODO configurable
+        final GetRecordsRequest req = GetRecordsRequest.builder().shardIterator(shardIterator(shardId)).limit(100).build();
 
-        final GetRecordsResult rsp = streamsClient.getRecords(req);
-        if (rsp.getNextShardIterator() == null) {
+        final GetRecordsResponse rsp = streamsClient.getRecords(req);
+        if (rsp.nextShardIterator() == null) {
             log.info("Shard ID `{}` for table `{}` has been closed, it will no longer be polled", shardId, config.tableForShard(shardId));
             shardIterators.remove(shardId);
             assignedShards.remove(shardId);
         } else {
-            log.debug("Retrieved {} records from shard ID `{}`", rsp.getRecords().size(), shardId);
-            shardIterators.put(shardId, rsp.getNextShardIterator());
+            log.debug("Retrieved {} records from shard ID `{}`", rsp.records().size(), shardId);
+            shardIterators.put(shardId, rsp.nextShardIterator());
         }
 
         currentShardIdx = (currentShardIdx + 1) % assignedShards.size();
@@ -106,19 +95,19 @@ public class DynamoDbSourceTask extends SourceTask {
         final String topic = config.topicFormat.replace("${table}", tableName);
         final Map<String, String> sourcePartition = sourcePartition(shardId);
 
-        return rsp.getRecords().stream()
-                .map(dynamoRecord -> toSourceRecord(sourcePartition, topic, dynamoRecord.getDynamodb()))
+        return rsp.records().stream()
+                .map(dynamoRecord -> toSourceRecord(sourcePartition, topic, dynamoRecord.dynamodb()))
                 .collect(Collectors.toList());
     }
 
     private SourceRecord toSourceRecord(Map<String, String> sourcePartition, String topic, StreamRecord dynamoRecord) {
         return new SourceRecord(
                 sourcePartition,
-                Collections.singletonMap(Keys.SEQNUM, dynamoRecord.getSequenceNumber()),
+                Collections.singletonMap(Keys.SEQNUM, dynamoRecord.sequenceNumber()),
                 topic, null,
-                RecordMapper.attributesSchema(), RecordMapper.toConnect(dynamoRecord.getKeys()),
-                RecordMapper.attributesSchema(), RecordMapper.toConnect(dynamoRecord.getNewImage()),
-                dynamoRecord.getApproximateCreationDateTime().getTime()
+                RecordMapper.attributesSchema(), RecordMapper.toConnect(dynamoRecord.keys()),
+                RecordMapper.attributesSchema(), RecordMapper.toConnect(dynamoRecord.newImage()),
+                dynamoRecord.approximateCreationDateTime().toEpochMilli()
         );
     }
 
@@ -130,7 +119,7 @@ public class DynamoDbSourceTask extends SourceTask {
                     config.streamArnForShard(shardId),
                     storedSequenceNumber(sourcePartition(shardId))
             );
-            iterator = streamsClient.getShardIterator(req).getShardIterator();
+            iterator = streamsClient.getShardIterator(req).shardIterator();
             shardIterators.put(shardId, iterator);
         }
         return iterator;
@@ -150,22 +139,21 @@ public class DynamoDbSourceTask extends SourceTask {
             String streamArn,
             String seqNum
     ) {
-        final GetShardIteratorRequest req = new GetShardIteratorRequest();
-        req.setShardId(shardId);
-        req.setStreamArn(streamArn);
+
+        GetShardIteratorRequest.Builder req = GetShardIteratorRequest.builder().shardId(shardId).streamArn(streamArn);
         if (seqNum == null) {
-            req.setShardIteratorType(ShardIteratorType.TRIM_HORIZON);
+            req.shardIteratorType(ShardIteratorType.TRIM_HORIZON);
         } else {
-            req.setShardIteratorType(ShardIteratorType.AFTER_SEQUENCE_NUMBER);
-            req.setSequenceNumber(seqNum);
+            req.shardIteratorType(ShardIteratorType.AFTER_SEQUENCE_NUMBER);
+            req.sequenceNumber(seqNum);
         }
-        return req;
+        return req.build();
     }
 
     @Override
     public void stop() {
         if (streamsClient != null) {
-            streamsClient.shutdown();
+            streamsClient.close();
             streamsClient = null;
         }
     }

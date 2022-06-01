@@ -16,7 +16,8 @@
 
 package dynamok.sink;
 
-import com.amazonaws.services.dynamodbv2.model.AttributeValue;
+import software.amazon.awssdk.core.BytesWrapper;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import org.apache.kafka.connect.data.Decimal;
@@ -28,7 +29,9 @@ import org.junit.Test;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -58,26 +61,26 @@ public class AttributeValueConverterTest {
                                 .put("bytes_set", ImmutableSet.of(new byte[]{42}))
                                 .put("map", ImmutableMap.of("key", "value"))
                                 .build()
-                ).getM();
-        assertEquals("1", attributeMap.get("byte").getN());
-        assertEquals("2", attributeMap.get("short").getN());
-        assertEquals("3", attributeMap.get("int").getN());
-        assertEquals("4", attributeMap.get("long").getN());
-        assertEquals("5.1", attributeMap.get("float").getN());
-        assertEquals("6.2", attributeMap.get("double").getN());
-        assertEquals("7.3", attributeMap.get("decimal").getN());
-        assertTrue(attributeMap.get("bool").getBOOL());
-        assertEquals("test", attributeMap.get("string").getS());
-        assertEquals(ByteBuffer.wrap(new byte[]{42}), attributeMap.get("byte_array").getB());
+                ).m();
+        assertEquals("1", attributeMap.get("byte").n());
+        assertEquals("2", attributeMap.get("short").n());
+        assertEquals("3", attributeMap.get("int").n());
+        assertEquals("4", attributeMap.get("long").n());
+        assertEquals("5.1", attributeMap.get("float").n());
+        assertEquals("6.2", attributeMap.get("double").n());
+        assertEquals("7.3", attributeMap.get("decimal").n());
+        assertTrue(attributeMap.get("bool").bool());
+        assertEquals("test", attributeMap.get("string").s());
+        assertEquals(ByteBuffer.wrap(new byte[]{42}), attributeMap.get("byte_array").b().asByteBuffer());
         assertEquals(
-                Arrays.asList(new AttributeValue().withN("1"), new AttributeValue().withN("2"), new AttributeValue().withN("3")),
-                attributeMap.get("list").getL()
+                Arrays.asList(AttributeValue.fromN("1"), AttributeValue.fromN("2"), AttributeValue.fromN("3")),
+                attributeMap.get("list").l()
         );
-        assertTrue(attributeMap.get("empty_set").getNULL());
-        assertEquals(Arrays.asList("a", "b", "c"), attributeMap.get("string_set").getSS());
-        assertEquals(Arrays.asList("1", "2", "3"), attributeMap.get("number_set").getNS());
-        assertEquals(Arrays.asList(ByteBuffer.wrap(new byte[]{42})), attributeMap.get("bytes_set").getBS());
-        assertEquals(ImmutableMap.of("key", new AttributeValue().withS("value")), attributeMap.get("map").getM());
+        assertTrue(attributeMap.get("empty_set").nul());
+        assertEquals(Arrays.asList("a", "b", "c"), attributeMap.get("string_set").ss());
+        assertEquals(Arrays.asList("1", "2", "3"), attributeMap.get("number_set").ns());
+        assertEquals(List.of(ByteBuffer.wrap(new byte[]{42})), attributeMap.get("bytes_set").bs().stream().map(BytesWrapper::asByteBuffer).collect(Collectors.toList()));
+        assertEquals(ImmutableMap.of("key", AttributeValue.fromS("value")), attributeMap.get("map").m());
     }
 
     @Test
@@ -117,25 +120,25 @@ public class AttributeValueConverterTest {
                 .put("map", ImmutableMap.of("key", "value"))
                 .put("inner_struct", new Struct(nestedStructSchema).put("x", "y"));
 
-        final Map<String, AttributeValue> attributeMap = AttributeValueConverter.toAttributeValue(schema, struct).getM();
-        assertEquals("1", attributeMap.get("int8").getN());
-        assertEquals("2", attributeMap.get("int16").getN());
-        assertEquals("3", attributeMap.get("int32").getN());
-        assertEquals("4", attributeMap.get("int64").getN());
-        assertEquals("5.1", attributeMap.get("float32").getN());
-        assertEquals("6.2", attributeMap.get("float64").getN());
-        assertEquals("7.3", attributeMap.get("decimal").getN());
-        assertTrue(attributeMap.get("bool").getBOOL());
-        assertEquals("test", attributeMap.get("string").getS());
-        assertEquals(ByteBuffer.wrap(new byte[]{42}), attributeMap.get("bytes_a").getB());
-        assertEquals(ByteBuffer.wrap(new byte[]{42}), attributeMap.get("bytes_b").getB());
+        final Map<String, AttributeValue> attributeMap = AttributeValueConverter.toAttributeValue(schema, struct).m();
+        assertEquals("1", attributeMap.get("int8").n());
+        assertEquals("2", attributeMap.get("int16").n());
+        assertEquals("3", attributeMap.get("int32").n());
+        assertEquals("4", attributeMap.get("int64").n());
+        assertEquals("5.1", attributeMap.get("float32").n());
+        assertEquals("6.2", attributeMap.get("float64").n());
+        assertEquals("7.3", attributeMap.get("decimal").n());
+        assertTrue(attributeMap.get("bool").bool());
+        assertEquals("test", attributeMap.get("string").s());
+        assertEquals(ByteBuffer.wrap(new byte[]{42}), attributeMap.get("bytes_a").b().asByteBuffer());
+        assertEquals(ByteBuffer.wrap(new byte[]{42}), attributeMap.get("bytes_b").b().asByteBuffer());
         assertEquals(
-                Arrays.asList(new AttributeValue().withN("1"), new AttributeValue().withN("2"), new AttributeValue().withN("3")),
-                attributeMap.get("array").getL()
+                Arrays.asList(AttributeValue.fromN("1"), AttributeValue.fromN("2"), AttributeValue.fromN("3")),
+                attributeMap.get("array").l()
         );
-        assertEquals(ImmutableMap.of("key", new AttributeValue().withS("value")), attributeMap.get("map").getM());
-        assertEquals(ImmutableMap.of("x", new AttributeValue().withS("y")), attributeMap.get("inner_struct").getM());
-        assertTrue(attributeMap.get("optional_string").getNULL());
+        assertEquals(ImmutableMap.of("key", AttributeValue.fromS("value")), attributeMap.get("map").m());
+        assertEquals(ImmutableMap.of("x", AttributeValue.fromS("y")), attributeMap.get("inner_struct").m());
+        assertTrue(attributeMap.get("optional_string").nul());
     }
 
 }

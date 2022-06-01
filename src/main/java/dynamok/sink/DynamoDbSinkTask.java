@@ -16,12 +16,6 @@
 
 package dynamok.sink;
 
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.auth.InstanceProfileCredentialsProvider;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
-import com.amazonaws.services.dynamodbv2.model.*;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.Timer;
@@ -41,9 +35,16 @@ import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTask;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClientBuilder;
+import software.amazon.awssdk.services.dynamodb.model.*;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 
 
@@ -74,59 +75,49 @@ public class DynamoDbSinkTask extends SinkTask {
     private final Logger log = LoggerFactory.getLogger(DynamoDbSinkTask.class);
 
     private ConnectorConfig config;
-    private AmazonDynamoDB client;
+    private DynamoDbClient client;
     private KafkaProducer<String, String> producer;
 
     @Override
     public void start(Map<String, String> props) {
         config = new ConnectorConfig(props);
         producer = Util.getKafkaProducer(config.broker);
+        DynamoDbClientBuilder ddb = DynamoDbClient.builder()
+                .region(config.region);
 
         if (config.accessKeyId.value().isEmpty() || config.secretKey.value().isEmpty()) {
-            client = AmazonDynamoDBClientBuilder
-                    .standard()
-                    .withCredentials(InstanceProfileCredentialsProvider.getInstance())
-                    .withRegion(config.region)
-                    .build();
             log.debug("AmazonDynamoDBStreamsClient created with DefaultAWSCredentialsProviderChain");
         } else {
-            final BasicAWSCredentials awsCreds = new BasicAWSCredentials(config.accessKeyId.value(), config.secretKey.value());
-            client = AmazonDynamoDBClientBuilder
-                    .standard()
-                    .withCredentials(new AWSStaticCredentialsProvider(awsCreds))
-                    .withRegion(config.region)
-                    .build();
+            final AwsCredentials awsCreds = AwsBasicCredentials.create(config.accessKeyId.value(), config.secretKey.value());
+            ddb = ddb.credentialsProvider(StaticCredentialsProvider.create(awsCreds));
             log.debug("AmazonDynamoDBClient created with AWS credentials from connector configuration");
         }
+        client = ddb.build();
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public void put(Collection<SinkRecord> records) {
         requests.mark(records.size());
 
         for (final SinkRecord record : records) {
             Timer.Context timerContext = requestProcessingTimer.time();
-            ProducerRecord<String, String> producerRecord = new ProducerRecord<>(config.errorKafkaTopic,
-                    "" + record.key(), record.value().toString());
             try {
                 Map<String, Object> valueMap = Util.jsonToMap(record.value().toString());
                 DynamoConnectMetaData dynamoConnectMetaData = null;
                 SinkRecord newRecord = new SinkRecord(record.topic(), record.kafkaPartition(), null,
                         record.key(), null, valueMap, record.kafkaOffset());
-                PutItemRequest putItemRequest = toPutRequest(newRecord).withTableName(tableName(newRecord));
                 if (valueMap.containsKey("__metadata")) {
                     Map<String, Object> metadata = (Map<String, Object>) valueMap.get("__metadata");
                     dynamoConnectMetaData = Util.mapToDynamoConnectMetaData(metadata);
-                    putItemRequest = putItemRequest
-                            .withConditionExpression(dynamoConnectMetaData.getConditionalExpression())
-                            .withExpressionAttributeValues(AttributeValueConverter.toAttributeValueSchemaless(dynamoConnectMetaData.getConditionalValueMap()).getM());
                 }
+                PutItemRequest putItemRequest = toPutRequest(newRecord, dynamoConnectMetaData);
                 client.putItem(putItemRequest);
             } catch (JsonParseException | JsonMappingException e) {
                 jsonParseException.inc();
                 log.error("Exception occurred while converting JSON to Map: {}", record, e);
                 log.warn("Sending to error topic...");
-                producer.send(producerRecord);
+                producer.send(new ProducerRecord<>(config.errorKafkaTopic, "JsonParseException" + record.key(), record.value().toString()));
             } catch (LimitExceededException | ProvisionedThroughputExceededException e) {
                 log.debug("Write failed with Limit/Throughput Exceeded exception; backing off");
                 context.timeout(config.retryBackoffMs);
@@ -137,11 +128,11 @@ public class DynamoDbSinkTask extends SinkTask {
                 //This is intentional failure for conditional check
             } catch (IOException e) {
                 log.error("Exception occurred in Json Parsing", e);
-                producer.send(producerRecord);
-            } catch (AmazonDynamoDBException e) {
+                producer.send(new ProducerRecord<>(config.errorKafkaTopic, "IOException" + record.key(), record.value().toString()));
+            } catch (DynamoDbException e) {
                 log.warn("Error in sending data to DynamoDB in record: {}", record, e);
-                if (e.getErrorCode().equalsIgnoreCase("ValidationException")) {
-                    producer.send(producerRecord);
+                if (e.awsErrorDetails().errorCode().equalsIgnoreCase("ValidationException")) {
+                    producer.send(new ProducerRecord<>(config.errorKafkaTopic, "DynamoDbException" + record.key(), record.value().toString()));
                 } else {
                     System.exit(1); // To exit connect completely
                 }
@@ -151,23 +142,28 @@ public class DynamoDbSinkTask extends SinkTask {
         }
     }
 
-    private PutItemRequest toPutRequest(SinkRecord record) {
-        final PutItemRequest pir = new PutItemRequest();
+    private PutItemRequest toPutRequest(SinkRecord record, DynamoConnectMetaData dynamoConnectMetaData) {
+        final PutItemRequest.Builder pir = PutItemRequest.builder().tableName(tableName(record));
+        Map<String, AttributeValue> item = new HashMap<>();
         if (!config.ignoreRecordValue) {
-            insert(ValueSource.RECORD_VALUE, record.valueSchema(), record.value(), pir);
+            insert(ValueSource.RECORD_VALUE, record.valueSchema(), record.value(), item);
         }
         if (!config.ignoreRecordKey) {
-            insert(ValueSource.RECORD_KEY, record.keySchema(), record.key(), pir);
+            insert(ValueSource.RECORD_KEY, record.keySchema(), record.key(), item);
         }
         if (config.kafkaCoordinateNames != null) {
-            pir.addItemEntry(config.kafkaCoordinateNames.topic, new AttributeValue().withS(record.topic()));
-            pir.addItemEntry(config.kafkaCoordinateNames.partition, new AttributeValue().withN(String.valueOf(record.kafkaPartition())));
-            pir.addItemEntry(config.kafkaCoordinateNames.offset, new AttributeValue().withN(String.valueOf(record.kafkaOffset())));
+            item.put(config.kafkaCoordinateNames.topic, AttributeValue.fromS(record.topic()));
+            item.put(config.kafkaCoordinateNames.partition, AttributeValue.fromN(String.valueOf(record.kafkaPartition())));
+            item.put(config.kafkaCoordinateNames.offset, AttributeValue.fromN(String.valueOf(record.kafkaOffset())));
         }
-        return pir;
+        if (dynamoConnectMetaData != null) {
+            pir.conditionExpression(dynamoConnectMetaData.getConditionalExpression())
+                    .expressionAttributeValues(AttributeValueConverter.toAttributeValueSchemaless(dynamoConnectMetaData.getConditionalValueMap()).m());
+        }
+        return pir.build();
     }
 
-    private void insert(ValueSource valueSource, Schema schema, Object value, PutItemRequest pir) {
+    private void insert(ValueSource valueSource, Schema schema, Object value, Map<String, AttributeValue> item) {
         final AttributeValue attributeValue;
         try {
             attributeValue = schema == null
@@ -180,16 +176,16 @@ public class DynamoDbSinkTask extends SinkTask {
 
         final String topAttributeName = valueSource.topAttributeName(config);
         if (!topAttributeName.isEmpty()) {
-            pir.addItemEntry(topAttributeName, attributeValue);
-        } else if (attributeValue.getM() != null) {
-            pir.setItem(attributeValue.getM());
+            item.put(topAttributeName, attributeValue);
+        } else if (attributeValue.m() != null) {
+            item.putAll(attributeValue.m());
         } else {
             throw new ConnectException("No top attribute name configured for " + valueSource + ", and it could not be converted to Map: " + attributeValue);
         }
     }
 
     private String tableName(SinkRecord record) {
-        return config.tableFormat.replace("${topic}", record.topic());
+        return config.tableFormat.equalsIgnoreCase("${topic}") ? config.tableFormat.replace("${topic}", record.topic()):config.tableFormat;
     }
 
     @Override
@@ -199,7 +195,7 @@ public class DynamoDbSinkTask extends SinkTask {
     @Override
     public void stop() {
         if (client != null) {
-            client.shutdown();
+            client.close();
             client = null;
         }
     }

@@ -16,13 +16,12 @@
 
 package dynamok.sink;
 
-import com.amazonaws.regions.Regions;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
+import software.amazon.awssdk.regions.Region;
 
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -49,7 +48,7 @@ class ConnectorConfig extends AbstractConfig {
 
     static final ConfigDef CONFIG_DEF = new ConfigDef()
             .define(Keys.REGION, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE, (key, regionName) -> {
-                if (Arrays.stream(Regions.values()).noneMatch(x -> x.getName().equals(regionName))) {
+                if (Region.regions().stream().noneMatch(x -> x.id().equals(regionName))) {
                     throw new ConfigException("Invalid AWS region: " + regionName);
                 }
             }, ConfigDef.Importance.HIGH, "AWS region for DynamoDB.")
@@ -64,7 +63,7 @@ class ConnectorConfig extends AbstractConfig {
             .define(Keys.BATCH_SIZE, ConfigDef.Type.INT, 1, ConfigDef.Range.between(1, 25),
                     ConfigDef.Importance.HIGH, "Batch size between 1 (dedicated ``PutItemRequest`` for each record) and 25 (which is the maximum number of items in a ``BatchWriteItemRequest``)")
             .define(Keys.KAFKA_ATTRIBUTES, ConfigDef.Type.LIST, "kafka_topic,kafka_partition,kafka_offset", (key, names) -> {
-                final List namesList = (List) names;
+                final List<?> namesList = (List<?>) names;
                 if (!namesList.isEmpty() && namesList.size() != 3)
                     throw new ConfigException(Keys.KAFKA_ATTRIBUTES,
                             "Must be empty or contain exactly 3 attribute names mapping to the topic, partition and offset, but was: " + namesList);
@@ -88,7 +87,7 @@ class ConnectorConfig extends AbstractConfig {
             .define(Keys.ERROR_KAFKA_TOPIC, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE,
                     ConfigDef.Importance.HIGH, "Error kafka topic name.");
 
-    final Regions region;
+    final Region region;
     final Password accessKeyId;
     final Password secretKey;
     final String tableFormat;
@@ -105,7 +104,7 @@ class ConnectorConfig extends AbstractConfig {
 
     ConnectorConfig(ConfigDef config, Map<String, String> parsedConfig) {
         super(config, parsedConfig);
-        region = Regions.fromName(getString(Keys.REGION));
+        region = Region.of(getString(Keys.REGION));
         accessKeyId = getPassword(Keys.ACCESS_KEY_ID);
         secretKey = getPassword(Keys.SECRET_KEY);
         tableFormat = getString(Keys.TABLE_FORMAT);
