@@ -16,7 +16,7 @@ import java.util.Map;
  * Date: 9/21/17.
  */
 public class ConsoleSinkTask extends SinkTask {
-    private static final Logger logger = LoggerFactory.getLogger(ConsoleSinkTask.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ConsoleSinkTask.class);
 
     @Override
     public String version() {
@@ -25,12 +25,12 @@ public class ConsoleSinkTask extends SinkTask {
 
     @Override
     public void start(Map<String, String> props) {
-        logger.info("Starting console sink task");
+        LOGGER.info("Starting console sink task");
     }
 
     @Override
     public void put(Collection<SinkRecord> records) {
-        records.forEach(p -> logger.info("Record: {}", p));
+        records.forEach(p -> LOGGER.info("Record: {}", p));
     }
 
     @Override

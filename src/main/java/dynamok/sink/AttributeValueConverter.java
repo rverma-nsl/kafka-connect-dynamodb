@@ -28,9 +28,9 @@ import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.stream.Collectors;
 
-public class AttributeValueConverter {
+public final class AttributeValueConverter {
 
-    public static final AttributeValue NULL_VALUE =  AttributeValue.fromNul(true);
+    public static final AttributeValue NULL_VALUE = AttributeValue.fromNul(true);
 
     public static AttributeValue toAttributeValue(Schema schema, Object value) {
         if (value == null) {
@@ -54,7 +54,7 @@ public class AttributeValueConverter {
             case INT64:
             case FLOAT32:
             case FLOAT64:
-                return  AttributeValue.fromN(value.toString());
+                return AttributeValue.fromN(value.toString());
             case BOOLEAN:
                 return AttributeValue.fromBool((boolean) value);
             case STRING:
@@ -62,11 +62,7 @@ public class AttributeValueConverter {
             case BYTES:
                 return AttributeValue.fromB(toByteBuffer(value));
             case ARRAY: {
-                return AttributeValue.fromL(
-                        ((List<?>) value).stream()
-                                .map(item -> toAttributeValue(schema.valueSchema(), item))
-                                .collect(Collectors.toList())
-                );
+                return AttributeValue.fromL(((List<?>) value).stream().map(item -> toAttributeValue(schema.valueSchema(), item)).collect(Collectors.toList()));
             }
             case MAP: {
                 if (schema.keySchema().isOptional()) {
@@ -75,13 +71,10 @@ public class AttributeValueConverter {
                 if (!schema.keySchema().type().isPrimitive()) {
                     throw new DataException("MAP key schema must be of primitive type");
                 }
-                final Map<?, ?> sourceMap = (Map<?,?>) value;
+                final Map<?, ?> sourceMap = (Map<?, ?>) value;
                 final Map<String, AttributeValue> attributesMap = new HashMap<>(sourceMap.size());
                 for (Map.Entry<?, ?> e : sourceMap.entrySet()) {
-                    attributesMap.put(
-                            primitiveAsString(nullFallback(e.getKey(), schema.keySchema().defaultValue())),
-                            toAttributeValue(schema.valueSchema(), e.getValue())
-                    );
+                    attributesMap.put(primitiveAsString(nullFallback(e.getKey(), schema.keySchema().defaultValue())), toAttributeValue(schema.valueSchema(), e.getValue()));
                 }
                 return AttributeValue.fromM(attributesMap);
             }
@@ -117,11 +110,7 @@ public class AttributeValueConverter {
         }
         if (value instanceof List) {
             // We could have treated it as NS/BS/SS if the list is homogeneous and a compatible type, but can't know for ane empty list
-            return AttributeValue.fromL(
-                    ((List<?>) value).stream()
-                            .map(AttributeValueConverter::toAttributeValueSchemaless)
-                            .collect(Collectors.toList())
-            );
+            return AttributeValue.fromL(((List<?>) value).stream().map(AttributeValueConverter::toAttributeValueSchemaless).collect(Collectors.toList()));
         }
         if (value instanceof Set) {
             final Set<?> set = (Set<?>) value;
@@ -145,12 +134,8 @@ public class AttributeValueConverter {
             final Map<String, AttributeValue> attributesMap = new HashMap<>(sourceMap.size());
             for (Map.Entry<?, ?> e : sourceMap.entrySet()) {
                 //Ignoring null & empty strings and keys starting with __
-                if(e.getValue() != null && (!(e.getValue() instanceof String) || e.getValue() != "") &&
-                        e.getKey() != null &&(!(e.getKey() instanceof String) || !((String) e.getKey()).startsWith("__"))) {
-                    attributesMap.put(
-                            primitiveAsString(e.getKey()),
-                            toAttributeValueSchemaless(e.getValue())
-                    );
+                if (e.getValue() != null && (!(e.getValue() instanceof String) || e.getValue() != "") && e.getKey() != null && (!(e.getKey() instanceof String) || !((String) e.getKey()).startsWith("__"))) {
+                    attributesMap.put(primitiveAsString(e.getKey()), toAttributeValueSchemaless(e.getValue()));
                 }
             }
             return AttributeValue.fromM(attributesMap);
@@ -182,6 +167,9 @@ public class AttributeValueConverter {
         } else {
             throw new DataException("Invalid bytes value of type: " + bytesValue.getClass());
         }
+    }
+
+    private AttributeValueConverter() {
     }
 
 }

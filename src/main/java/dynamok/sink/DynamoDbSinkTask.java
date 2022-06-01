@@ -50,10 +50,10 @@ import java.util.Map;
 
 public class DynamoDbSinkTask extends SinkTask {
 
-    private final Meter requests = DynamoDbSinkConnector.metricRegistry.meter("Requests");
-    private final Counter jsonParseException = DynamoDbSinkConnector.metricRegistry.counter("JsonParseException");
-    private final Counter conditionalCheckFailed = DynamoDbSinkConnector.metricRegistry.counter("ConditionalCheckFailed");
-    private final Timer requestProcessingTimer = DynamoDbSinkConnector.metricRegistry.timer("RequestProcessingTime");
+    private final Meter requests = DynamoDbSinkConnector.METRIC_REGISTRY.meter("Requests");
+    private final Counter jsonParseException = DynamoDbSinkConnector.METRIC_REGISTRY.counter("JsonParseException");
+    private final Counter conditionalCheckFailed = DynamoDbSinkConnector.METRIC_REGISTRY.counter("ConditionalCheckFailed");
+    private final Timer requestProcessingTimer = DynamoDbSinkConnector.METRIC_REGISTRY.timer("RequestProcessingTime");
 
     private enum ValueSource {
         RECORD_KEY {

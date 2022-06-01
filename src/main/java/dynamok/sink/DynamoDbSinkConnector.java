@@ -30,7 +30,7 @@ import java.util.Map;
 
 public class DynamoDbSinkConnector extends SinkConnector {
 
-    static final MetricRegistry metricRegistry = new MetricRegistry();
+    static final MetricRegistry METRIC_REGISTRY = new MetricRegistry();
 
     private Map<String, String> props;
     private JmxReporter jmxReporter;
@@ -43,13 +43,13 @@ public class DynamoDbSinkConnector extends SinkConnector {
     public void start(Map<String, String> props) {
         this.props = props;
         // Starting JMX reporting
-        jmxReporter = JmxReporter.forRegistry(metricRegistry).inDomain("dynamo-connect").build();
+        jmxReporter = JmxReporter.forRegistry(METRIC_REGISTRY).inDomain("dynamo-connect").build();
         jmxReporter.start();
     }
 
     @Override
     public List<Map<String, String>> taskConfigs(int maxTasks) {
-        metricRegistry.register(MetricRegistry.name(DynamoDbSinkConnector.class, "taskDefinition"),
+        METRIC_REGISTRY.register(MetricRegistry.name(DynamoDbSinkConnector.class, "taskDefinition"),
                 (Gauge<String>) () -> props.toString());
         return Collections.nCopies(maxTasks, props);
     }

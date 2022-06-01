@@ -16,22 +16,21 @@
 
 package dynamok.source;
 
+import com.google.common.collect.ImmutableMap;
+import org.apache.kafka.connect.data.Struct;
+import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.core.BytesWrapper;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
-import com.google.common.collect.ImmutableMap;
-import org.apache.kafka.connect.data.Struct;
-import org.junit.Test;
 
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 
 public class RecordMapperTest {
 

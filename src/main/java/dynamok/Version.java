@@ -16,7 +16,7 @@
 
 package dynamok;
 
-public class Version {
+public final class Version {
 
     // TODO pull this in from a packaged resource controlled by the build
     private static final String VERSION = "0.1.0-SNAPSHOT";

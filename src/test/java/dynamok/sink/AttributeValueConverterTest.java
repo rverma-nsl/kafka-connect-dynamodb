@@ -16,6 +16,7 @@
 
 package dynamok.sink;
 
+import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.core.BytesWrapper;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import com.google.common.collect.ImmutableMap;
@@ -24,7 +25,6 @@ import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
-import org.junit.Test;
 
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
@@ -33,8 +33,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 
 public class AttributeValueConverterTest {
 
