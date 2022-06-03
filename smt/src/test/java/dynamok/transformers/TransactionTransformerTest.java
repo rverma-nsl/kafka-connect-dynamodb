@@ -107,7 +107,7 @@ public class TransactionTransformerTest {
             final SourceRecord record = new SourceRecord(null, null, "test", 0,
                     null, TXN);
             final SourceRecord transformedRecord = xform.apply(record);
-            assertEquals(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(transformedRecord.value()), TXN_DYNAMO.strip());
+            assertEquals(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(transformedRecord.value()), TXN_DYNAMO);
         } catch (JsonProcessingException e) {
             throw new RuntimeException(e);
         }

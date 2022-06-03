@@ -61,7 +61,7 @@ public class TransactionTransformer<R extends ConnectRecord<R>> implements Trans
             item.put("transType", msg.getData().getTranType());
             item.put("userId", msg.getUserContext().getUserId());
             item.put("payload", CompressionUtils.compressString(MAPPER.writeValueAsString(msg.getData())));
-            return newRecord(record, null, item);
+            return newRecord(record, null, MAPPER.writeValueAsString(item));
         } catch (IOException e) {
             e.printStackTrace();
             throw new InvalidRecordException("No msg map");
