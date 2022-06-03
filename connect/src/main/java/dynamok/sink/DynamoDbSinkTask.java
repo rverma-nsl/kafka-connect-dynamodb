@@ -109,21 +109,9 @@ public class DynamoDbSinkTask extends SinkTask {
         for (final SinkRecord record : records) {
             Timer.Context timerContext = requestProcessingTimer.time();
             try {
-                Map<String, Object> valueMap = Util.jsonToMap(record.value().toString());
                 DynamoConnectMetaData dynamoConnectMetaData = null;
-                SinkRecord newRecord = new SinkRecord(record.topic(), record.kafkaPartition(), null,
-                        record.key(), null, valueMap, record.kafkaOffset());
-                if (valueMap.containsKey("__metadata")) {
-                    Map<String, Object> metadata = (Map<String, Object>) valueMap.get("__metadata");
-                    dynamoConnectMetaData = Util.mapToDynamoConnectMetaData(metadata);
-                }
-                PutItemRequest putItemRequest = toPutRequest(newRecord, dynamoConnectMetaData);
+                PutItemRequest putItemRequest = toPutRequest(record, dynamoConnectMetaData);
                 client.putItem(putItemRequest);
-            } catch (JsonParseException | JsonMappingException e) {
-                jsonParseException.inc();
-                log.error("Exception occurred while converting JSON to Map: {}", record, e);
-                log.warn("Sending to error topic...");
-                producer.send(new ProducerRecord<>(config.errorKafkaTopic, "JsonParseException" + record.key(), record.value().toString()));
             } catch (LimitExceededException | ProvisionedThroughputExceededException e) {
                 log.debug("Write failed with Limit/Throughput Exceeded exception; backing off");
                 context.timeout(config.retryBackoffMs);
@@ -132,9 +120,6 @@ public class DynamoDbSinkTask extends SinkTask {
                 conditionalCheckFailed.inc();
                 log.debug("Conditional check failed for record: {}", record, e);
                 //This is intentional failure for conditional check
-            } catch (IOException e) {
-                log.error("Exception occurred in Json Parsing", e);
-                producer.send(new ProducerRecord<>(config.errorKafkaTopic, "IOException" + record.key(), record.value().toString()));
             } catch (DynamoDbException e) {
                 log.warn("Error in sending data to DynamoDB in record: {}", record, e);
                 if (e.awsErrorDetails().errorCode().equalsIgnoreCase("ValidationException")) {
