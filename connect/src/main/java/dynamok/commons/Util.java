@@ -17,7 +17,7 @@ import java.util.Properties;
  * Date: 9/22/17.
  */
 public final class Util {
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     public static KafkaProducer<String, String> getKafkaProducer(String broker) {
         Properties props = new Properties();
@@ -29,12 +29,12 @@ public final class Util {
     }
 
     public static Map<String, Object> jsonToMap(String json) throws IOException {
-        return objectMapper.readValue(json, new TypeReference<>() {
+        return MAPPER.readValue(json, new TypeReference<>() {
         });
     }
 
     public static DynamoConnectMetaData mapToDynamoConnectMetaData(Map<String, Object> map) {
-        return objectMapper.convertValue(map, DynamoConnectMetaData.class);
+        return MAPPER.convertValue(map, DynamoConnectMetaData.class);
     }
 
     private Util() {

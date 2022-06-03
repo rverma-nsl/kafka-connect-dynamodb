@@ -34,7 +34,7 @@ public class TransactionTransformer<R extends ConnectRecord<R>> implements Trans
 
     public static final String OVERVIEW_DOC = "Insert a random UUID into a connect record";
     public static final ConfigDef CONFIG_DEF = new ConfigDef();
-    private static final ObjectMapper mapper = new ObjectMapper();
+    private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final String PURPOSE = "Convert transRequet to dynamo Item";
 
     @Override
@@ -48,7 +48,7 @@ public class TransactionTransformer<R extends ConnectRecord<R>> implements Trans
 
     private R applySchemaless(R record) {
         try {
-            MessageHolder<TransactionDto> msg = mapper.readValue(record.value().toString(), new TypeReference<>() {
+            MessageHolder<TransactionDto> msg = MAPPER.readValue(record.value().toString(), new TypeReference<>() {
             });
             String transactionId = msg.getData().getTransactionId();
             String uniqueID = CompressionUtils.getTransactionUniqueId(msg.getUserContext().getTenantId(), transactionId, msg.getData().getGsiContextualID());
@@ -61,7 +61,7 @@ public class TransactionTransformer<R extends ConnectRecord<R>> implements Trans
             item.put("transId", transactionId);
             item.put("transType", msg.getData().getTranType());
             item.put("userId", msg.getUserContext().getUserId());
-            item.put("payload", CompressionUtils.compress(mapper.writeValueAsString(msg.getData())));
+            item.put("payload", CompressionUtils.compressString(MAPPER.writeValueAsString(msg.getData())));
             return newRecord(record, null, item);
         } catch (IOException e) {
             throw new InvalidRecordException("No msg map");

@@ -2,7 +2,6 @@ package dynamok.transformers;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
-import com.nsl.logical.model.TransactionDto;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
