@@ -22,6 +22,7 @@
         <jackson.version>2.13.3</jackson.version>
         <dropwizard.version>4.2.9</dropwizard.version>
         <java.version>11</java.version>
+        <avro.version>1.11.0</avro.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
     <licenses>

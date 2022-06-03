@@ -1,0 +1,47 @@
+{
+  "namespace": "dynamok.transformers.dto",
+  "type": "record",
+  "name": "TransactionItem",
+  "fields": [
+    {
+      "name": "id",
+      "type": "string"
+    },
+    {
+      "name": "containerCuName",
+      "type": "string"
+    },
+    {
+      "name": "gsiContextualId",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    {
+      "name": "transId",
+      "type": "string"
+    },
+    {
+      "name": "transType",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    {
+      "name": "userId",
+      "type": [
+        "long",
+        "null"
+      ]
+    },
+    {
+      "name": "payload",
+      "type": [
+        "bytes",
+        "null"
+      ]
+    }
+  ]
+}
