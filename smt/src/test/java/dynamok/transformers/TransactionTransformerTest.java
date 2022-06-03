@@ -16,8 +16,6 @@
 
 package dynamok.transformers;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -31,8 +29,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 
 public class TransactionTransformerTest {
-    private static final ObjectMapper mapper = new ObjectMapper();
-
     private static final String TXN = "{\n" +
             "  \"data\": {\n" +
             "    \"executionState\": [\n" +

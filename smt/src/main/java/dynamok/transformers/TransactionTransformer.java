@@ -36,8 +36,6 @@ public class TransactionTransformer<R extends ConnectRecord<R>> implements Trans
     public static final ConfigDef CONFIG_DEF = new ConfigDef();
     private static final ObjectMapper MAPPER = new ObjectMapper().setSerializationInclusion(JsonInclude.Include.NON_NULL);
 
-    private static final String PURPOSE = "Convert transRequet to dynamo Item";
-
     @Override
     public void configure(Map<String, ?> props) {
     }

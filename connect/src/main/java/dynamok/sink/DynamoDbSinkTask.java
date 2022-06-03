@@ -48,7 +48,6 @@ import java.util.Map;
 public class DynamoDbSinkTask extends SinkTask {
 
     private final Meter requests = DynamoDbSinkConnector.METRIC_REGISTRY.meter("Requests");
-    private final Counter jsonParseException = DynamoDbSinkConnector.METRIC_REGISTRY.counter("JsonParseException");
     private final Counter conditionalCheckFailed = DynamoDbSinkConnector.METRIC_REGISTRY.counter("ConditionalCheckFailed");
     private final Timer requestProcessingTimer = DynamoDbSinkConnector.METRIC_REGISTRY.timer("RequestProcessingTime");
 
@@ -99,7 +98,6 @@ public class DynamoDbSinkTask extends SinkTask {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public void put(Collection<SinkRecord> records) {
         requests.mark(records.size());
 

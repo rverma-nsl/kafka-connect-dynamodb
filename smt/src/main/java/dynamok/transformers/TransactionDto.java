@@ -6,14 +6,13 @@ import com.nsl.logical.model.CuExecutionStateDto;
 import com.nsl.logical.model.TransactionMetaDataDto;
 import com.nsl.logical.model.TxnData;
 
-import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Stack;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class TransactionDto extends TransactionMetaDataDto implements Serializable {
+public class TransactionDto extends TransactionMetaDataDto {
     private Stack<CuExecutionStateDto> executionState;
     private String masterTxnId;
     private Map<String, String> masterTransactionIdRecords = new HashMap<>();

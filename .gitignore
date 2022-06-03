@@ -3,3 +3,4 @@ target/
 *.iml
 */connector.json
 .DS_Store
+.vscode
