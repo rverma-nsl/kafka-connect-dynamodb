@@ -46,10 +46,11 @@ public final class Util {
 
     public static ValidJson isValidJson(String json) {
         try {
-            return new ValidJson(MAPPER.readTree(json), true);
-        } catch (JacksonException e) {
-            return new ValidJson(null, false);
+            if (json.startsWith("{") && json.endsWith("}"))
+                return new ValidJson(MAPPER.readTree(json), true);
+        } catch (JacksonException ignored) {
         }
+        return new ValidJson(null, false);
     }
 
     public static class ValidJson {

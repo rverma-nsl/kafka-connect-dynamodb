@@ -38,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 
 public class AttributeValueConverterTest {
-    private static final String TXN_DYNAMO = "{" +
+    private static final String ATTRIBUTE_JSON = "{" +
             "  \"byte\": 1," +
             "  \"short\": 2," +
             "  \"int\": 3," +
@@ -64,10 +64,12 @@ public class AttributeValueConverterTest {
             "  }" +
             "}";
 
+    private static final String TXN_DYNAMO = "{\"payload\":\"H4sIAAAAAAAAAAXBx6JrQAAA0A+yYMQEi7dwo0UfPXZEH73L179zCu0O8Qp2+iegWuY6xsK7Kyv4tq6v9gisTRwYCFBwJlM6IxdTjTBpb7XOb7Kz389AaOh5ZNmczrtEHfvpVh6auY7hzdZVivV0OXg117K4qpTsNct11P3lflzA0+53JPwlaIa652WSEw7UzXvVLusQa8bgS883X1XuDDDegHuGTVWbMCJ0cuC4RelsgMqIbhUlIzwH7N+MzaJLhZyxWKY3JYaBUcr0p4Thz9p/qy82NOeYQkGBrDwDXSxY/7q24PEAV4ta9JykqPm7NsElrHWhCmVM7itNpmJhclOXcS8yi0+ldxF4iu5oA27qZHYdUj3b6cVK+vyY76jhYv55wP1pKw0voOJgx12x1jUrqOKgxeAAWj7wmcK/4gNFHw6ioO7NpNkQfVi3I9omZg/qWS55aVxfCxbvtmJAC76dzLkbzfcBy1ykVPZxs1KpE9oOz+YacMJSfTUjkjrqjOBH6IT4ttXMH3I3W/DXG4g4C3hchZgYkmbSZzxdhL9WBcIeqSSQqPMF6g0gHYPmD6tbDLFiVXluP3nRa9E2ChASAlU+SPX97z97VgfkMAIAAA==\",\"transId\":\"730159305639\",\"containerCuName\":\"Management of Logistics\",\"id\":\"astestm302_730159305639\",\"userId\":959926885238,\"status\":\"TRIGGERED\"}";
+
     @Test
     public void jsonConversion() {
         final Map<String, AttributeValue> attributeMap =
-                AttributeValueConverter.toAttributeValueSchemaless(TXN_DYNAMO).m();
+                AttributeValueConverter.toAttributeValueSchemaless(ATTRIBUTE_JSON).m();
         assertEquals("1", attributeMap.get("byte").n());
         assertEquals("2", attributeMap.get("short").n());
         assertEquals("3", attributeMap.get("int").n());
@@ -81,6 +83,13 @@ public class AttributeValueConverterTest {
 //        assertEquals(Arrays.asList("a", "b", "c"), attributeMap.get("string_set").l());
 //        assertEquals(Arrays.asList("1", "2", "3"), attributeMap.get("number_set").l());
         assertEquals(ImmutableMap.of("key", AttributeValue.fromS("value")), attributeMap.get("map").m());
+    }
+
+    @Test
+    public void smtJsonConversion() {
+        final Map<String, AttributeValue> attributeMap =
+                AttributeValueConverter.toAttributeValueSchemaless(TXN_DYNAMO).m();
+        assertEquals("959926885238", attributeMap.get("userId").n());
     }
 
     @Test
