@@ -38,6 +38,50 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 
 public class AttributeValueConverterTest {
+    private static final String TXN_DYNAMO = "{" +
+            "  \"byte\": 1," +
+            "  \"short\": 2," +
+            "  \"int\": 3," +
+            "  \"long\": 4," +
+            "  \"float\": 5.1," +
+            "  \"double\": 6.2," +
+            "  \"decimal\": 7.3," +
+            "  \"bool\": true," +
+            "  \"string\": \"test\"," +
+            "  \"empty_list\": []," +
+            "  \"string_set\": [" +
+            "    \"a\"," +
+            "    \"b\"," +
+            "    \"c\"" +
+            "  ]," +
+            "  \"number_set\": [" +
+            "    1," +
+            "    2," +
+            "    3" +
+            "  ]," +
+            "  \"map\": {" +
+            "    \"key\": \"value\"" +
+            "  }" +
+            "}";
+
+    @Test
+    public void jsonConversion() {
+        final Map<String, AttributeValue> attributeMap =
+                AttributeValueConverter.toAttributeValueSchemaless(TXN_DYNAMO).m();
+        assertEquals("1", attributeMap.get("byte").n());
+        assertEquals("2", attributeMap.get("short").n());
+        assertEquals("3", attributeMap.get("int").n());
+        assertEquals("4", attributeMap.get("long").n());
+        assertEquals("5.1", attributeMap.get("float").n());
+        assertEquals("6.2", attributeMap.get("double").n());
+        assertEquals("7.3", attributeMap.get("decimal").n());
+        assertTrue(attributeMap.get("bool").bool());
+        assertEquals("test", attributeMap.get("string").s());
+        assertEquals(Arrays.asList(), attributeMap.get("empty_list").l());
+//        assertEquals(Arrays.asList("a", "b", "c"), attributeMap.get("string_set").l());
+//        assertEquals(Arrays.asList("1", "2", "3"), attributeMap.get("number_set").l());
+        assertEquals(ImmutableMap.of("key", AttributeValue.fromS("value")), attributeMap.get("map").m());
+    }
 
     @Test
     public void schemalessConversion() {

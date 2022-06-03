@@ -16,6 +16,7 @@
 
 package dynamok.sink;
 
+import dynamok.commons.Util;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
@@ -24,6 +25,7 @@ import org.apache.kafka.connect.errors.DataException;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -103,7 +105,26 @@ public final class AttributeValueConverter {
             return AttributeValue.fromBool((Boolean) value);
         }
         if (value instanceof String) {
-            return AttributeValue.fromS((String) value);
+            try {
+                Util.ValidJson json = Util.isValidJson((String) value);
+                if (json.isJson) {
+                    final Map<String, Object> sourceMap = Util.jsonToMap(json.node);
+                    final Map<String, AttributeValue> attributesMap = new HashMap<>(sourceMap.size());
+                    for (Map.Entry<String, Object> e : sourceMap.entrySet()) {
+                        //Ignoring null & empty strings and keys starting with __
+                        if (e.getValue() != null &&
+                                (!(e.getValue() instanceof String) || e.getValue() != "") &&
+                                e.getKey() != null && !e.getKey().startsWith("__")) {
+                            attributesMap.put(primitiveAsString(e.getKey()), toAttributeValueSchemaless(e.getValue()));
+                        }
+                    }
+                    return AttributeValue.fromM(attributesMap);
+                } else {
+                    return AttributeValue.fromS((String) value);
+                }
+            } catch (IOException e) {
+                throw new DataException("Unsupported Set element type: " + e.getMessage());
+            }
         }
         if (value instanceof byte[] || value instanceof ByteBuffer) {
             return AttributeValue.fromB(toByteBuffer(value));

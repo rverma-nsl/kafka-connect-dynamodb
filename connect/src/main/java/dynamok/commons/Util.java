@@ -1,6 +1,8 @@
 package dynamok.commons;
 
+import com.fasterxml.jackson.core.JacksonException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dynamok.sink.DynamoConnectMetaData;
 import org.apache.kafka.clients.producer.KafkaProducer;
@@ -33,9 +35,33 @@ public final class Util {
         });
     }
 
+    public static Map<String, Object> jsonToMap(JsonNode json) throws IOException {
+        return MAPPER.convertValue(json, new TypeReference<>() {
+        });
+    }
+
     public static DynamoConnectMetaData mapToDynamoConnectMetaData(Map<String, Object> map) {
         return MAPPER.convertValue(map, DynamoConnectMetaData.class);
     }
+
+    public static ValidJson isValidJson(String json) {
+        try {
+            return new ValidJson(MAPPER.readTree(json), true);
+        } catch (JacksonException e) {
+            return new ValidJson(null, false);
+        }
+    }
+
+    public static class ValidJson {
+        public JsonNode node;
+        public boolean isJson;
+
+        public ValidJson(JsonNode node, boolean isJson) {
+            this.node = node;
+            this.isJson = isJson;
+        }
+    }
+
 
     private Util() {
     }
