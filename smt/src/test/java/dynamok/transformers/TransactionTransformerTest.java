@@ -75,16 +75,7 @@ public class TransactionTransformerTest {
             "  \"methodName\": \"save\"\n" +
             "}";
 
-    private static final String TXN_DYNAMO = "{\n" +
-            "  \"transType\" : null,\n" +
-            "  \"payload\" : \"H4sIAAAAAAAAAA3QyQJjMAAA0A9y0FqKwxzEMqXUWjS3krTWEpFavn7mfcLD7p496MKEQ494N9ehwqLYtZpKDKqzWUQyM68kaYx7mSVNRbo1wskaGnwvunQ7EWCzbIMiGtBcK+Ow7LlmUSi7Q2v7sjOI9HWK+7jyp5N5/RoU9jObt4npkjhFjmOMIzQKp7nX349wwaBJUsqAQZ3bzcqswMl1zcCRIEt73o2LP30RUHqJb2mM+MLqjq3ubS4NLfx7Lehv3e+a1X96YKiWlO5eDu6mK6Qpfin8LIWPeJkagfs8/+bL3hgpFti7JzknmFkrLVa9Ps19Gl/iyFW1eLMQXAQ+PDtBlmT+YMKw14mK9oPSZsij3eMeOh+r3r7qNbckWk63L5Xe9soL53oLU/9o1ScJi2kSyq2VtY0AbpolboYFy7WLedjtzVCOYq7si4J4rrWPa4KUreGnjsEjvI58E466F2ll2nKOR/4PfbH540Stk2YA6lNZawEfxxBf1k83W2oCx9uNtnWiIKtMseucKP4FW/kLSM+Z3NSNBNtec9cRktUFiOQ9MQa23mfk8REPslQZS9fnKREkPbic3znybACzC+608X0MDwX7NHXLBU0AUibkzUcVW8mMZckMnT//AAGBAkVIAgAA\",\n" +
-            "  \"transId\" : \"730159305639\",\n" +
-            "  \"containerCuName\" : \"Management of Logistics\",\n" +
-            "  \"id\" : \"astestm302_730159305639\",\n" +
-            "  \"gsiContextualId\" : null,\n" +
-            "  \"userId\" : 959926885238,\n" +
-            "  \"status\" : \"TRIGGERED\"\n" +
-            "}";
+    private static final String TXN_DYNAMO = "{\"payload\":\"H4sIAAAAAAAAAAXBx6JrQAAA0A+yYMQEi7dwo0UfPXZEH73L179zCu0O8Qp2+iegWuY6xsK7Kyv4tq6v9gisTRwYCFBwJlM6IxdTjTBpb7XOb7Kz389AaOh5ZNmczrtEHfvpVh6auY7hzdZVivV0OXg117K4qpTsNct11P3lflzA0+53JPwlaIa652WSEw7UzXvVLusQa8bgS883X1XuDDDegHuGTVWbMCJ0cuC4RelsgMqIbhUlIzwH7N+MzaJLhZyxWKY3JYaBUcr0p4Thz9p/qy82NOeYQkGBrDwDXSxY/7q24PEAV4ta9JykqPm7NsElrHWhCmVM7itNpmJhclOXcS8yi0+ldxF4iu5oA27qZHYdUj3b6cVK+vyY76jhYv55wP1pKw0voOJgx12x1jUrqOKgxeAAWj7wmcK/4gNFHw6ioO7NpNkQfVi3I9omZg/qWS55aVxfCxbvtmJAC76dzLkbzfcBy1ykVPZxs1KpE9oOz+YacMJSfTUjkjrqjOBH6IT4ttXMH3I3W/DXG4g4C3hchZgYkmbSZzxdhL9WBcIeqSSQqPMF6g0gHYPmD6tbDLFiVXluP3nRa9E2ChASAlU+SPX97z97VgfkMAIAAA==\",\"transId\":\"730159305639\",\"containerCuName\":\"Management of Logistics\",\"id\":\"astestm302_730159305639\",\"userId\":959926885238,\"status\":\"TRIGGERED\"}";
     private static final TransactionTransformer<SourceRecord> xform = new TransactionTransformer<>();
 
     @AfterAll
@@ -103,14 +94,9 @@ public class TransactionTransformerTest {
     @Test
     public void transDtoToDynamo() {
         xform.configure(Collections.singletonMap("demo", "demo"));
-        try {
-            final SourceRecord record = new SourceRecord(null, null, "test", 0,
-                    null, TXN);
-            final SourceRecord transformedRecord = xform.apply(record);
-            assertEquals(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(transformedRecord.value()), TXN_DYNAMO);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException(e);
-        }
-
+        final SourceRecord record = new SourceRecord(null, null, "test", 0,
+                null, TXN);
+        final SourceRecord transformedRecord = xform.apply(record);
+        assertEquals(transformedRecord.value(), TXN_DYNAMO.strip());
     }
 }

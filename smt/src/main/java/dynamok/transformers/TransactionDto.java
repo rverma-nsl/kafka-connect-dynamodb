@@ -1,6 +1,7 @@
 package dynamok.transformers;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.nsl.logical.model.CuExecutionStateDto;
 import com.nsl.logical.model.TransactionMetaDataDto;
 import com.nsl.logical.model.TxnData;
@@ -11,6 +12,7 @@ import java.util.Map;
 import java.util.Stack;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class TransactionDto extends TransactionMetaDataDto implements Serializable {
     private Stack<CuExecutionStateDto> executionState;
     private String masterTxnId;

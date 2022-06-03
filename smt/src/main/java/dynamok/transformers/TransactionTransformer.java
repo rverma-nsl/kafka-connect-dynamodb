@@ -16,6 +16,7 @@
 
 package dynamok.transformers;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nsl.logical.model.MessageHolder;
@@ -33,7 +34,8 @@ public class TransactionTransformer<R extends ConnectRecord<R>> implements Trans
 
     public static final String OVERVIEW_DOC = "Insert a random UUID into a connect record";
     public static final ConfigDef CONFIG_DEF = new ConfigDef();
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final ObjectMapper MAPPER = new ObjectMapper().setSerializationInclusion(JsonInclude.Include.NON_NULL);
+
     private static final String PURPOSE = "Convert transRequet to dynamo Item";
 
     @Override
