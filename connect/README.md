@@ -45,6 +45,3 @@ Open a terminal to execute the following command:
 docker exec kafka kafka-console-consumer --bootstrap-server kafka:9092 --topic source-1 --from-beginning
 ```
 
-# License
-
-This project is licensed under the [Apache 2.0 License](./LICENSE).
