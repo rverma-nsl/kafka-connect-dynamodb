@@ -146,7 +146,7 @@ public class DynamoDbSinkTask extends SinkTask {
             pir.conditionExpression(dynamoConnectMetaData.getConditionalExpression())
                     .expressionAttributeValues(AttributeValueConverter.toAttributeValueSchemaless(dynamoConnectMetaData.getConditionalValueMap()).m());
         }
-        return pir.build();
+        return pir.item(item).build();
     }
 
     private void insert(ValueSource valueSource, Schema schema, Object value, Map<String, AttributeValue> item) {
