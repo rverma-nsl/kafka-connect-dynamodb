@@ -19,8 +19,6 @@ package dynamok.sink;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.Timer;
-import com.fasterxml.jackson.core.JsonParseException;
-import com.fasterxml.jackson.databind.JsonMappingException;
 import dynamok.Version;
 import dynamok.commons.Util;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -42,7 +40,6 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClientBuilder;
 import software.amazon.awssdk.services.dynamodb.model.*;
 
-import java.io.IOException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
