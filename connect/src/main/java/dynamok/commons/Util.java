@@ -46,8 +46,9 @@ public final class Util {
 
     public static ValidJson isValidJson(String json) {
         try {
-            if (json.startsWith("{") && json.endsWith("}"))
+            if (json.startsWith("{") && json.endsWith("}")) {
                 return new ValidJson(MAPPER.readTree(json), true);
+            }
         } catch (JacksonException ignored) {
         }
         return new ValidJson(null, false);
