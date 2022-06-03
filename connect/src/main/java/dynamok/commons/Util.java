@@ -17,7 +17,7 @@ import java.util.Properties;
  * Date: 9/22/17.
  */
 public final class Util {
-    private static ObjectMapper objectMapper = new ObjectMapper();
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
     public static KafkaProducer<String, String> getKafkaProducer(String broker) {
         Properties props = new Properties();
@@ -29,7 +29,7 @@ public final class Util {
     }
 
     public static Map<String, Object> jsonToMap(String json) throws IOException {
-        return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {
+        return objectMapper.readValue(json, new TypeReference<>() {
         });
     }
 

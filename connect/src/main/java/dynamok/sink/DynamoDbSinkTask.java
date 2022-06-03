@@ -78,7 +78,7 @@ public class DynamoDbSinkTask extends SinkTask {
     private DynamoDbClient client;
     private KafkaProducer<String, String> producer;
 
-    private Map<String, String> tableMap = new HashMap<>();
+    private final Map<String, String> tableMap = new HashMap<>();
 
     @Override
     public void start(Map<String, String> props) {
