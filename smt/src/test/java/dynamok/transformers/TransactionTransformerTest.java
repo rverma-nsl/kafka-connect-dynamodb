@@ -26,7 +26,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -76,15 +75,15 @@ public class TransactionTransformerTest {
             "  \"methodName\": \"save\"\n" +
             "}";
 
-    private static final String TxnDynamo = "{\n" +
-            "  \"transType\": \"null\",\n" +
-            "  \"payload\": \"eJyVUctu2zAQ/JWAZ7kQRZEifXOc1BGQ5uDHqSiCNbVSCMiUQVJIAsP/XspxUzkBUpRHzszOzO6B4AvqPpjOrgIEJNOfB6I7G8BYdPO+rMiUCpFnSmVc0VwlxGGNDq3G+Zc03bvICmcsj5Dgksm8GGFxAL6EHtqBQxarixHf5psL2SNVTKpCioKqghx/JWQHPqBbO7Ae9FChrJaoO1d5Mj0ck3GPG+P3Lbw+wC5WJD/AQoO7GOGqq6/uu8b4YLQnCQnjYZFZsJRyxVIumDrBpmn+FGZCyULyTHGa/GNnI/R/Igwn6WMZsl6Wi8Xt8vZmnOE86Rkc3nW9N7Ypbd09fsegnyKviudcm4FCBWe5EpKmKZcJAe9NY7HaeHSnkorHpELGKkySv/i7+2y1KhcPJ3MfwIXLqamKLyHGb/aD5exNjbP9vjUatm2k1tB6jJRoNl5oQpp++CM6zWrBgE2E0DDJqa4m20zgZJsjgCwgi2eP5t2zfUs8DhyX6zD6VrPwKdMZuX79KOlPUS8kNOWMvyOfJZ1rNtaEwT6TaSolyyQX4vgbzOj9Lg==\",\n" +
-            "  \"transId\": \"730159305639\",\n" +
-            "  \"containerCuName\": \"Management of Logistics\",\n" +
-            "  \"id\": \"astestm302_730159305639_730159305639\",\n" +
-            "  \"gsiContextualId\": \"null\",\n" +
-            "  \"status\": \"TRIGGERED\",\n" +
-            "  \"userId\": \"959926885238\"\n" +
+    private static final String TXN_DYNAMO = "{\n" +
+            "  \"transType\" : null,\n" +
+            "  \"payload\" : \"H4sIAAAAAAAAAA3QyQJjMAAA0A9y0FqKwxzEMqXUWjS3krTWEpFavn7mfcLD7p496MKEQ494N9ehwqLYtZpKDKqzWUQyM68kaYx7mSVNRbo1wskaGnwvunQ7EWCzbIMiGtBcK+Ow7LlmUSi7Q2v7sjOI9HWK+7jyp5N5/RoU9jObt4npkjhFjmOMIzQKp7nX349wwaBJUsqAQZ3bzcqswMl1zcCRIEt73o2LP30RUHqJb2mM+MLqjq3ubS4NLfx7Lehv3e+a1X96YKiWlO5eDu6mK6Qpfin8LIWPeJkagfs8/+bL3hgpFti7JzknmFkrLVa9Ps19Gl/iyFW1eLMQXAQ+PDtBlmT+YMKw14mK9oPSZsij3eMeOh+r3r7qNbckWk63L5Xe9soL53oLU/9o1ScJi2kSyq2VtY0AbpolboYFy7WLedjtzVCOYq7si4J4rrWPa4KUreGnjsEjvI58E466F2ll2nKOR/4PfbH540Stk2YA6lNZawEfxxBf1k83W2oCx9uNtnWiIKtMseucKP4FW/kLSM+Z3NSNBNtec9cRktUFiOQ9MQa23mfk8REPslQZS9fnKREkPbic3znybACzC+608X0MDwX7NHXLBU0AUibkzUcVW8mMZckMnT//AAGBAkVIAgAA\",\n" +
+            "  \"transId\" : \"730159305639\",\n" +
+            "  \"containerCuName\" : \"Management of Logistics\",\n" +
+            "  \"id\" : \"astestm302_730159305639\",\n" +
+            "  \"gsiContextualId\" : null,\n" +
+            "  \"userId\" : 959926885238,\n" +
+            "  \"status\" : \"TRIGGERED\"\n" +
             "}";
     private static final TransactionTransformer<SourceRecord> xform = new TransactionTransformer<>();
 
@@ -106,9 +105,9 @@ public class TransactionTransformerTest {
         xform.configure(Collections.singletonMap("demo", "demo"));
         try {
             final SourceRecord record = new SourceRecord(null, null, "test", 0,
-                    null, mapper.readValue(TXN, Map.class));
+                    null, TXN);
             final SourceRecord transformedRecord = xform.apply(record);
-            assertEquals(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(transformedRecord.value()), TxnDynamo.strip());
+            assertEquals(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(transformedRecord.value()), TXN_DYNAMO.strip());
         } catch (JsonProcessingException e) {
             throw new RuntimeException(e);
         }

@@ -19,7 +19,6 @@ package dynamok.transformers;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nsl.logical.model.MessageHolder;
-import com.nsl.logical.model.TransactionDto;
 import org.apache.kafka.common.InvalidRecordException;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.connect.connector.ConnectRecord;
