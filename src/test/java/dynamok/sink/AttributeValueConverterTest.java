@@ -16,27 +16,117 @@
 
 package dynamok.sink;
 
-import com.amazonaws.services.dynamodbv2.model.AttributeValue;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import software.amazon.awssdk.core.BytesWrapper;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 
 public class AttributeValueConverterTest {
+    private static final String ATTRIBUTE_JSON = "{" +
+            "  \"byte\": 1," +
+            "  \"short\": 2," +
+            "  \"int\": 3," +
+            "  \"long\": 4," +
+            "  \"float\": 5.1," +
+            "  \"double\": 6.2," +
+            "  \"decimal\": 7.3," +
+            "  \"bool\": true," +
+            "  \"string\": \"test\"," +
+            "  \"empty_list\": []," +
+            "  \"string_set\": [" +
+            "    \"a\"," +
+            "    \"b\"," +
+            "    \"c\"" +
+            "  ]," +
+            "  \"number_set\": [" +
+            "    1," +
+            "    2," +
+            "    3" +
+            "  ]," +
+            "  \"map\": {" +
+            "    \"key\": \"value\"" +
+            "  }" +
+            "}";
+
+    private static final String TXN = "{\n" +
+            "  \"data\": {\n" +
+            "    \"executionState\": [\n" +
+            "      {\n" +
+            "        \"containerCuId\": 1664299259149,\n" +
+            "        \"referenceContainerCuId\": 1664299259149,\n" +
+            "        \"currentCuId\": 1442965838479,\n" +
+            "        \"currentContextualId\": \"GS1664299259149.CU1442965838479_193897867197\"\n" +
+            "      }\n" +
+            "    ],\n" +
+            "    \"masterTransactionIdRecords\": {},\n" +
+            "    \"containerCuDisplayName\": \"Management of Logistics\",\n" +
+            "    \"transactionId\": \"730159305639\",\n" +
+            "    \"triggerCuId\": 36987852951,\n" +
+            "    \"containerCuId\": 1664299259149,\n" +
+            "    \"containerCuName\": \"Management of Logistics\",\n" +
+            "    \"transactionStatus\": \"TRIGGERED\",\n" +
+            "    \"triggerCuName\": \"wareHousingInfo_Fetch\",\n" +
+            "    \"dateTime\": 1653496810058,\n" +
+            "    \"assignedUserId\": \"959926885238\",\n" +
+            "    \"assignedStatus\": \"ASSIGNED\",\n" +
+            "    \"startTime\": 1653496809999,\n" +
+            "    \"isUpdateAssigneeApplicable\": false,\n" +
+            "    \"id\": 730159305639,\n" +
+            "    \"guid\": \"c02f63a3-66ca-41cd-b26e-b4eaa87a2978\",\n" +
+            "    \"ownerId\": 959926885238,\n" +
+            "    \"createdAt\": 1653496809999,\n" +
+            "    \"createdBy\": 959926885238,\n" +
+            "    \"updatedAt\": 1653496810535,\n" +
+            "    \"updatedBy\": 959926885238,\n" +
+            "    \"orgUnitId\": 280088328566\n" +
+            "  },\n" +
+            "  \"userContext\": {\n" +
+            "    \"tenantId\": \"astestm302\",\n" +
+            "    \"userId\": 959926885238,\n" +
+            "    \"emailId\": \"user3@test.com\",\n" +
+            "    \"orgUnitId\": 280088328566\n" +
+            "  },\n" +
+            "  \"logEventTime\": 1653496810547,\n" +
+            "  \"methodName\": \"save\"\n" +
+            "}";
 
     @Test
-    public void schemalessConversion() {
+    public void schemalessJsonConversion() {
+        final Map<String, AttributeValue> attributeMap =
+                AttributeValueConverter.toAttributeValueSchemaless(ATTRIBUTE_JSON).m();
+        assertEquals("1", attributeMap.get("byte").n());
+        assertEquals("2", attributeMap.get("short").n());
+        assertEquals("3", attributeMap.get("int").n());
+        assertEquals("4", attributeMap.get("long").n());
+        assertEquals("5.1", attributeMap.get("float").n());
+        assertEquals("6.2", attributeMap.get("double").n());
+        assertEquals("7.3", attributeMap.get("decimal").n());
+        assertTrue(attributeMap.get("bool").bool());
+        assertEquals("test", attributeMap.get("string").s());
+        assertEquals(Arrays.asList(), attributeMap.get("empty_list").l());
+        assertEquals(Arrays.asList(AttributeValue.fromS("a"), AttributeValue.fromS("b"), AttributeValue.fromS("c")), attributeMap.get("string_set").l());
+        assertEquals(Arrays.asList(AttributeValue.fromN("1"), AttributeValue.fromN("2"), AttributeValue.fromN("3")), attributeMap.get("number_set").l());
+        assertEquals(ImmutableMap.of("key", AttributeValue.fromS("value")), attributeMap.get("map").m());
+    }
+
+    @Test
+    public void schemalessObjectConversion() {
         final Map<String, AttributeValue> attributeMap =
                 AttributeValueConverter.toAttributeValueSchemaless(
                         ImmutableMap.builder()
@@ -58,30 +148,30 @@ public class AttributeValueConverterTest {
                                 .put("bytes_set", ImmutableSet.of(new byte[]{42}))
                                 .put("map", ImmutableMap.of("key", "value"))
                                 .build()
-                ).getM();
-        assertEquals("1", attributeMap.get("byte").getN());
-        assertEquals("2", attributeMap.get("short").getN());
-        assertEquals("3", attributeMap.get("int").getN());
-        assertEquals("4", attributeMap.get("long").getN());
-        assertEquals("5.1", attributeMap.get("float").getN());
-        assertEquals("6.2", attributeMap.get("double").getN());
-        assertEquals("7.3", attributeMap.get("decimal").getN());
-        assertTrue(attributeMap.get("bool").getBOOL());
-        assertEquals("test", attributeMap.get("string").getS());
-        assertEquals(ByteBuffer.wrap(new byte[]{42}), attributeMap.get("byte_array").getB());
+                ).m();
+        assertEquals("1", attributeMap.get("byte").n());
+        assertEquals("2", attributeMap.get("short").n());
+        assertEquals("3", attributeMap.get("int").n());
+        assertEquals("4", attributeMap.get("long").n());
+        assertEquals("5.1", attributeMap.get("float").n());
+        assertEquals("6.2", attributeMap.get("double").n());
+        assertEquals("7.3", attributeMap.get("decimal").n());
+        assertTrue(attributeMap.get("bool").bool());
+        assertEquals("test", attributeMap.get("string").s());
+        assertEquals(ByteBuffer.wrap(new byte[]{42}), attributeMap.get("byte_array").b().asByteBuffer());
         assertEquals(
-                Arrays.asList(new AttributeValue().withN("1"), new AttributeValue().withN("2"), new AttributeValue().withN("3")),
-                attributeMap.get("list").getL()
+                Arrays.asList(AttributeValue.fromN("1"), AttributeValue.fromN("2"), AttributeValue.fromN("3")),
+                attributeMap.get("list").l()
         );
-        assertTrue(attributeMap.get("empty_set").getNULL());
-        assertEquals(Arrays.asList("a", "b", "c"), attributeMap.get("string_set").getSS());
-        assertEquals(Arrays.asList("1", "2", "3"), attributeMap.get("number_set").getNS());
-        assertEquals(Arrays.asList(ByteBuffer.wrap(new byte[]{42})), attributeMap.get("bytes_set").getBS());
-        assertEquals(ImmutableMap.of("key", new AttributeValue().withS("value")), attributeMap.get("map").getM());
+        assertTrue(attributeMap.get("empty_set").nul());
+        assertEquals(Arrays.asList("a", "b", "c"), attributeMap.get("string_set").ss());
+        assertEquals(Arrays.asList("1", "2", "3"), attributeMap.get("number_set").ns());
+        assertEquals(List.of(ByteBuffer.wrap(new byte[]{42})), attributeMap.get("bytes_set").bs().stream().map(BytesWrapper::asByteBuffer).collect(Collectors.toList()));
+        assertEquals(ImmutableMap.of("key", AttributeValue.fromS("value")), attributeMap.get("map").m());
     }
 
     @Test
-    public void schemaedConversion() {
+    public void schemedConversion() {
         Schema nestedStructSchema = SchemaBuilder.struct().field("x", SchemaBuilder.STRING_SCHEMA).build();
         Schema schema = SchemaBuilder.struct()
                 .field("int8", SchemaBuilder.INT8_SCHEMA)
@@ -117,25 +207,24 @@ public class AttributeValueConverterTest {
                 .put("map", ImmutableMap.of("key", "value"))
                 .put("inner_struct", new Struct(nestedStructSchema).put("x", "y"));
 
-        final Map<String, AttributeValue> attributeMap = AttributeValueConverter.toAttributeValue(schema, struct).getM();
-        assertEquals("1", attributeMap.get("int8").getN());
-        assertEquals("2", attributeMap.get("int16").getN());
-        assertEquals("3", attributeMap.get("int32").getN());
-        assertEquals("4", attributeMap.get("int64").getN());
-        assertEquals("5.1", attributeMap.get("float32").getN());
-        assertEquals("6.2", attributeMap.get("float64").getN());
-        assertEquals("7.3", attributeMap.get("decimal").getN());
-        assertTrue(attributeMap.get("bool").getBOOL());
-        assertEquals("test", attributeMap.get("string").getS());
-        assertEquals(ByteBuffer.wrap(new byte[]{42}), attributeMap.get("bytes_a").getB());
-        assertEquals(ByteBuffer.wrap(new byte[]{42}), attributeMap.get("bytes_b").getB());
+        final Map<String, AttributeValue> attributeMap = AttributeValueConverter.toAttributeValue(schema, struct).m();
+        assertEquals("1", attributeMap.get("int8").n());
+        assertEquals("2", attributeMap.get("int16").n());
+        assertEquals("3", attributeMap.get("int32").n());
+        assertEquals("4", attributeMap.get("int64").n());
+        assertEquals("5.1", attributeMap.get("float32").n());
+        assertEquals("6.2", attributeMap.get("float64").n());
+        assertEquals("7.3", attributeMap.get("decimal").n());
+        assertTrue(attributeMap.get("bool").bool());
+        assertEquals("test", attributeMap.get("string").s());
+        assertEquals(ByteBuffer.wrap(new byte[]{42}), attributeMap.get("bytes_a").b().asByteBuffer());
+        assertEquals(ByteBuffer.wrap(new byte[]{42}), attributeMap.get("bytes_b").b().asByteBuffer());
         assertEquals(
-                Arrays.asList(new AttributeValue().withN("1"), new AttributeValue().withN("2"), new AttributeValue().withN("3")),
-                attributeMap.get("array").getL()
+                Arrays.asList(AttributeValue.fromN("1"), AttributeValue.fromN("2"), AttributeValue.fromN("3")),
+                attributeMap.get("array").l()
         );
-        assertEquals(ImmutableMap.of("key", new AttributeValue().withS("value")), attributeMap.get("map").getM());
-        assertEquals(ImmutableMap.of("x", new AttributeValue().withS("y")), attributeMap.get("inner_struct").getM());
-        assertTrue(attributeMap.get("optional_string").getNULL());
+        assertEquals(ImmutableMap.of("key", AttributeValue.fromS("value")), attributeMap.get("map").m());
+        assertEquals(ImmutableMap.of("x", AttributeValue.fromS("y")), attributeMap.get("inner_struct").m());
+        assertTrue(attributeMap.get("optional_string").nul());
     }
-
 }

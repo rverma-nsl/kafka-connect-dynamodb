@@ -16,13 +16,12 @@
 
 package dynamok.source;
 
-import com.amazonaws.regions.Regions;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
+import software.amazon.awssdk.regions.Region;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -42,7 +41,7 @@ class ConnectorConfig extends AbstractConfig {
 
     static final ConfigDef CONFIG_DEF = new ConfigDef()
             .define(Keys.REGION, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE, (key, regionName) -> {
-                if (Arrays.stream(Regions.values()).noneMatch(x -> x.getName().equals(regionName))) {
+                if (Region.regions().stream().noneMatch(x -> x.id().equals(regionName))) {
                     throw new ConfigException("Invalid AWS region: " + regionName);
                 }
             }, ConfigDef.Importance.HIGH, "AWS region for DynamoDB.")
@@ -61,7 +60,7 @@ class ConnectorConfig extends AbstractConfig {
             .define(Keys.TOPIC_FORMAT, ConfigDef.Type.STRING, "${table}",
                     ConfigDef.Importance.HIGH, "Format string for destination Kafka topic, use ``${table}`` as placeholder for source table name.");
 
-    final Regions region;
+    final Region region;
     final Password accessKeyId;
     final Password secretKey;
     final String topicFormat;
@@ -71,7 +70,7 @@ class ConnectorConfig extends AbstractConfig {
 
     ConnectorConfig(Map<String, String> props) {
         super(CONFIG_DEF, props);
-        region = Regions.fromName(getString(Keys.REGION));
+        region = Region.of(getString(Keys.REGION));
         accessKeyId = getPassword(Keys.ACCESS_KEY_ID);
         secretKey = getPassword(Keys.SECRET_KEY);
         tablesPrefix = getString(Keys.TABLES_PREFIX);

@@ -16,7 +16,7 @@ import java.util.Map;
  * Date: 9/21/17.
  */
 public class ConsoleSinkConnector extends SinkConnector {
-    private static final Logger logger = LoggerFactory.getLogger(ConsoleSinkConnector.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ConsoleSinkConnector.class);
     private Map<String, String> props;
     @Override
     public String version() {
@@ -26,7 +26,7 @@ public class ConsoleSinkConnector extends SinkConnector {
     @Override
     public void start(Map<String, String> props) {
         this.props = props;
-        logger.info("Starting Console Sink Connector");
+        LOGGER.info("Starting Console Sink Connector");
     }
 
     @Override
@@ -41,7 +41,7 @@ public class ConsoleSinkConnector extends SinkConnector {
 
     @Override
     public void stop() {
-        logger.info("Stopping Console Sink Connector");
+        LOGGER.info("Stopping Console Sink Connector");
     }
 
     @Override

@@ -16,8 +16,8 @@
 
 package dynamok.source;
 
-import com.amazonaws.regions.Regions;
 import org.apache.kafka.common.config.ConfigException;
+import software.amazon.awssdk.regions.Region;
 
 import java.util.Arrays;
 import java.util.List;
@@ -29,18 +29,18 @@ class TaskConfig {
     enum Keys {
         ;
 
-        static String REGION = "region";
-        static String ACCESS_KEY_ID = "access.key.id";
-        static String SECRET_KEY = "secret.key";
-        static String TOPIC_FORMAT = "topic.format";
-        static String SHARDS = "shards";
-        static String TABLE = "table";
-        static String STREAM_ARN = "stream.arn";
+        static final String REGION = "region";
+        static final String ACCESS_KEY_ID = "access.key.id";
+        static final String SECRET_KEY = "secret.key";
+        static final String TOPIC_FORMAT = "topic.format";
+        static final String SHARDS = "shards";
+        static final String TABLE = "table";
+        static final String STREAM_ARN = "stream.arn";
     }
 
     private final Map<String, String> props;
 
-    final Regions region;
+    final Region region;
     final String accessKeyId;
     final String secretKey;
     final String topicFormat;
@@ -49,7 +49,7 @@ class TaskConfig {
     TaskConfig(Map<String, String> props) {
         this.props = props;
 
-        region = Regions.fromName(getValue(Keys.REGION));
+        region = Region.of(getValue(Keys.REGION));
         accessKeyId = getValue(Keys.ACCESS_KEY_ID, "");
         secretKey = getValue(Keys.SECRET_KEY, "");
         topicFormat = getValue(Keys.TOPIC_FORMAT);

@@ -16,13 +16,15 @@
 
 package dynamok.source;
 
-import com.amazonaws.services.dynamodbv2.model.AttributeValue;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
+import software.amazon.awssdk.core.BytesWrapper;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public enum RecordMapper {
     ;
@@ -59,22 +61,22 @@ public enum RecordMapper {
             final String attributeName = attribute.getKey();
             final AttributeValue attributeValue = attribute.getValue();
             final Struct attributeValueStruct = new Struct(AV_SCHEMA);
-            if (attributeValue.getS() != null) {
-                attributeValueStruct.put("S", attributeValue.getS());
-            } else if (attributeValue.getN() != null) {
-                attributeValueStruct.put("N", attributeValue.getN());
-            } else if (attributeValue.getB() != null) {
-                attributeValueStruct.put("B", attributeValue.getB());
-            } else if (attributeValue.getSS() != null) {
-                attributeValueStruct.put("SS", attributeValue.getSS());
-            } else if (attributeValue.getNS() != null) {
-                attributeValueStruct.put("NS", attributeValue.getNS());
-            } else if (attributeValue.getBS() != null) {
-                attributeValueStruct.put("BS", attributeValue.getBS());
-            } else if (attributeValue.getNULL() != null) {
-                attributeValueStruct.put("NULL", attributeValue.getNULL());
-            } else if (attributeValue.getBOOL() != null) {
-                attributeValueStruct.put("BOOL", attributeValue.getBOOL());
+            if (attributeValue.s() != null) {
+                attributeValueStruct.put("S", attributeValue.s());
+            } else if (attributeValue.n() != null) {
+                attributeValueStruct.put("N", attributeValue.n());
+            } else if (attributeValue.b() != null) {
+                attributeValueStruct.put("B", attributeValue.b().asByteBuffer());
+            } else if (attributeValue.ss().size() > 0) {
+                attributeValueStruct.put("SS", attributeValue.ss());
+            } else if (attributeValue.ns().size() > 0) {
+                attributeValueStruct.put("NS", attributeValue.ns());
+            } else if (attributeValue.bs().size() > 0) {
+                attributeValueStruct.put("BS", attributeValue.bs().stream().map(BytesWrapper::asByteBuffer).collect(Collectors.toList()));
+            } else if (attributeValue.nul() != null) {
+                attributeValueStruct.put("NULL", attributeValue.nul());
+            } else if (attributeValue.bool() != null) {
+                attributeValueStruct.put("BOOL", attributeValue.bool());
             }
             connectAttributes.put(attributeName, attributeValueStruct);
         }

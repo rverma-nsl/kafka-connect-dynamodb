@@ -16,17 +16,6 @@
 
 package dynamok.source;
 
-import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDBStreamsClient;
-import com.amazonaws.services.dynamodbv2.model.DescribeStreamRequest;
-import com.amazonaws.services.dynamodbv2.model.DescribeStreamResult;
-import com.amazonaws.services.dynamodbv2.model.ListTablesResult;
-import com.amazonaws.services.dynamodbv2.model.Shard;
-import com.amazonaws.services.dynamodbv2.model.StreamSpecification;
-import com.amazonaws.services.dynamodbv2.model.StreamViewType;
-import com.amazonaws.services.dynamodbv2.model.TableDescription;
 import dynamok.Version;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.connect.connector.Task;
@@ -35,13 +24,14 @@ import org.apache.kafka.connect.source.SourceConnector;
 import org.apache.kafka.connect.util.ConnectorUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.model.*;
+import software.amazon.awssdk.services.dynamodb.streams.DynamoDbStreamsClient;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class DynamoDbSourceConnector extends SourceConnector {
@@ -60,13 +50,13 @@ public class DynamoDbSourceConnector extends SourceConnector {
     public List<Map<String, String>> taskConfigs(int maxTasks) {
         return ConnectorUtils.groupPartitions(new ArrayList<>(streamShards.keySet()), maxTasks).stream().map(taskShards -> {
             final Map<String, String> taskConfig = new HashMap<>();
-            taskConfig.put(TaskConfig.Keys.REGION, config.region.getName());
+            taskConfig.put(TaskConfig.Keys.REGION, config.region.id());
             taskConfig.put(TaskConfig.Keys.TOPIC_FORMAT, config.topicFormat);
-            taskConfig.put(TaskConfig.Keys.SHARDS, taskShards.stream().map(Shard::getShardId).collect(Collectors.joining(",")));
+            taskConfig.put(TaskConfig.Keys.SHARDS, taskShards.stream().map(Shard::shardId).collect(Collectors.joining(",")));
             taskShards.forEach(shard -> {
                 final TableDescription tableDesc = streamShards.get(shard);
-                taskConfig.put(shard.getShardId() + "." + TaskConfig.Keys.TABLE, tableDesc.getTableName());
-                taskConfig.put(shard.getShardId() + "." + TaskConfig.Keys.STREAM_ARN, tableDesc.getLatestStreamArn());
+                taskConfig.put(shard.shardId() + "." + TaskConfig.Keys.TABLE, tableDesc.tableName());
+                taskConfig.put(shard.shardId() + "." + TaskConfig.Keys.STREAM_ARN, tableDesc.latestStreamArn());
             });
             return taskConfig;
         }).collect(Collectors.toList());
@@ -77,67 +67,64 @@ public class DynamoDbSourceConnector extends SourceConnector {
         config = new ConnectorConfig(props);
         streamShards = new HashMap<>();
 
-        final AmazonDynamoDBClient client;
-        final AmazonDynamoDBStreamsClient streamsClient;
+        final DynamoDbClient client;
+        final DynamoDbStreamsClient streamsClient;
 
         if (config.accessKeyId.value().isEmpty() || config.secretKey.value().isEmpty()) {
-            client = new AmazonDynamoDBClient(DefaultAWSCredentialsProviderChain.getInstance());
-            streamsClient = new AmazonDynamoDBStreamsClient(DefaultAWSCredentialsProviderChain.getInstance());
+            client = DynamoDbClient.builder().region(config.region).build();
+            streamsClient = DynamoDbStreamsClient.builder().region(config.region).build();
             log.debug("AmazonDynamoDBStreamsClient created with DefaultAWSCredentialsProviderChain");
         } else {
-            final BasicAWSCredentials awsCreds = new BasicAWSCredentials(config.accessKeyId.value(), config.secretKey.value());
-            client = new AmazonDynamoDBClient(awsCreds);
-            streamsClient = new AmazonDynamoDBStreamsClient(awsCreds);
+            final AwsCredentials awsCreds = AwsBasicCredentials.create(config.accessKeyId.value(), config.secretKey.value());
+            client = DynamoDbClient.builder().region(config.region).credentialsProvider(StaticCredentialsProvider.create(awsCreds)).build();
+            streamsClient = DynamoDbStreamsClient.builder().region(config.region).credentialsProvider(StaticCredentialsProvider.create(awsCreds)).build();
             log.debug("AmazonDynamoDB clients created with AWS credentials from connector configuration");
         }
-
-        client.configureRegion(config.region);
-        streamsClient.configureRegion(config.region);
 
         final Set<String> ignoredTables = new HashSet<>();
         final Set<String> consumeTables = new HashSet<>();
 
         String lastEvaluatedTableName = null;
         do {
-            final ListTablesResult listResult = client.listTables(lastEvaluatedTableName);
+            final ListTablesResponse listResult = client.listTables(ListTablesRequest.builder().exclusiveStartTableName(lastEvaluatedTableName).build());
 
-            for (String tableName : listResult.getTableNames()) {
+            for (String tableName : listResult.tableNames()) {
                 if (!acceptTable(tableName)) {
                     ignoredTables.add(tableName);
                     continue;
                 }
 
-                final TableDescription tableDesc = client.describeTable(tableName).getTable();
+                final TableDescription tableDesc = client.describeTable(DescribeTableRequest.builder().tableName(tableName).build()).table();
 
-                final StreamSpecification streamSpec = tableDesc.getStreamSpecification();
+                final StreamSpecification streamSpec = tableDesc.streamSpecification();
 
-                if (streamSpec == null || !streamSpec.isStreamEnabled()) {
+                if (streamSpec == null || !streamSpec.streamEnabled()) {
                     throw new ConnectException(String.format("DynamoDB table `%s` does not have streams enabled", tableName));
                 }
 
-                final String streamViewType = streamSpec.getStreamViewType();
+                final String streamViewType = streamSpec.streamViewType().name();
                 if (!streamViewType.equals(StreamViewType.NEW_IMAGE.name()) && !streamViewType.equals(StreamViewType.NEW_AND_OLD_IMAGES.name())) {
                     throw new ConnectException(String.format("DynamoDB stream view type for table `%s` is %s", tableName, streamViewType));
                 }
 
-                final DescribeStreamResult describeStreamResult =
-                        streamsClient.describeStream(new DescribeStreamRequest().withStreamArn(tableDesc.getLatestStreamArn()));
+                final DescribeStreamResponse describeStreamResult =
+                        streamsClient.describeStream(DescribeStreamRequest.builder().streamArn(tableDesc.latestStreamArn()).build());
 
-                for (Shard shard : describeStreamResult.getStreamDescription().getShards()) {
+                for (Shard shard : describeStreamResult.streamDescription().shards()) {
                     streamShards.put(shard, tableDesc);
                 }
 
                 consumeTables.add(tableName);
             }
 
-            lastEvaluatedTableName = listResult.getLastEvaluatedTableName();
+            lastEvaluatedTableName = listResult.lastEvaluatedTableName();
         } while (lastEvaluatedTableName != null);
 
         log.info("Tables to ignore: {}", ignoredTables);
         log.info("Tables to ingest: {}", consumeTables);
 
-        client.shutdown();
-        streamsClient.shutdown();
+        client.close();
+        streamsClient.close();
     }
 
     private boolean acceptTable(String tableName) {

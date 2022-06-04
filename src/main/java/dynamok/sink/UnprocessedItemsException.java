@@ -16,7 +16,7 @@
 
 package dynamok.sink;
 
-import com.amazonaws.services.dynamodbv2.model.WriteRequest;
+import software.amazon.awssdk.services.dynamodb.model.WriteRequest;
 
 import java.util.List;
 import java.util.Map;

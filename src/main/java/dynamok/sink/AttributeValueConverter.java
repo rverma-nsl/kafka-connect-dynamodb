@@ -16,25 +16,23 @@
 
 package dynamok.sink;
 
-import com.amazonaws.services.dynamodbv2.model.AttributeValue;
+import dynamok.commons.Util;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.DataException;
+import software.amazon.awssdk.core.SdkBytes;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Base64;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
-public class AttributeValueConverter {
+public final class AttributeValueConverter {
 
-    public static final AttributeValue NULL_VALUE = new AttributeValue().withNULL(true);
+    public static final AttributeValue NULL_VALUE = AttributeValue.fromNul(true);
 
     public static AttributeValue toAttributeValue(Schema schema, Object value) {
         if (value == null) {
@@ -48,7 +46,7 @@ public class AttributeValueConverter {
         }
 
         if (schema.name() != null && schema.name().equals(Decimal.LOGICAL_NAME)) {
-            return new AttributeValue().withN(value.toString());
+            return AttributeValue.fromN(value.toString());
         }
 
         switch (schema.type()) {
@@ -58,19 +56,15 @@ public class AttributeValueConverter {
             case INT64:
             case FLOAT32:
             case FLOAT64:
-                return new AttributeValue().withN(value.toString());
+                return AttributeValue.fromN(value.toString());
             case BOOLEAN:
-                return new AttributeValue().withBOOL((boolean) value);
+                return AttributeValue.fromBool((boolean) value);
             case STRING:
-                return new AttributeValue().withS((String) value);
+                return AttributeValue.fromS((String) value);
             case BYTES:
-                return new AttributeValue().withB(toByteBuffer(value));
+                return AttributeValue.fromB(toByteBuffer(value));
             case ARRAY: {
-                return new AttributeValue().withL(
-                        ((List<?>) value).stream()
-                                .map(item -> toAttributeValue(schema.valueSchema(), item))
-                                .collect(Collectors.toList())
-                );
+                return AttributeValue.fromL(((List<?>) value).stream().map(item -> toAttributeValue(schema.valueSchema(), item)).collect(Collectors.toList()));
             }
             case MAP: {
                 if (schema.keySchema().isOptional()) {
@@ -79,15 +73,12 @@ public class AttributeValueConverter {
                 if (!schema.keySchema().type().isPrimitive()) {
                     throw new DataException("MAP key schema must be of primitive type");
                 }
-                final Map<?, ?> sourceMap = (Map) value;
+                final Map<?, ?> sourceMap = (Map<?, ?>) value;
                 final Map<String, AttributeValue> attributesMap = new HashMap<>(sourceMap.size());
                 for (Map.Entry<?, ?> e : sourceMap.entrySet()) {
-                    attributesMap.put(
-                            primitiveAsString(nullFallback(e.getKey(), schema.keySchema().defaultValue())),
-                            toAttributeValue(schema.valueSchema(), e.getValue())
-                    );
+                    attributesMap.put(primitiveAsString(nullFallback(e.getKey(), schema.keySchema().defaultValue())), toAttributeValue(schema.valueSchema(), e.getValue()));
                 }
-                return new AttributeValue().withM(attributesMap);
+                return AttributeValue.fromM(attributesMap);
             }
             case STRUCT: {
                 final Struct struct = (Struct) value;
@@ -96,7 +87,7 @@ public class AttributeValueConverter {
                 for (Field field : fields) {
                     attributesMap.put(field.name(), toAttributeValue(field.schema(), struct.get(field)));
                 }
-                return new AttributeValue().withM(attributesMap);
+                return AttributeValue.fromM(attributesMap);
             }
             default:
                 throw new DataException("Unknown Schema.Type: " + schema.type());
@@ -108,56 +99,67 @@ public class AttributeValueConverter {
             return NULL_VALUE;
         }
         if (value instanceof Number) {
-            return new AttributeValue().withN(value.toString());
+            return AttributeValue.fromN(value.toString());
         }
         if (value instanceof Boolean) {
-            return new AttributeValue().withBOOL((Boolean) value);
+            return AttributeValue.fromBool((Boolean) value);
         }
         if (value instanceof String) {
-            return new AttributeValue().withS((String) value);
+            try {
+                Util.ValidJson json = Util.isValidJson((String) value);
+                if (json.isJson) {
+                    final Map<String, Object> sourceMap = Util.jsonToMap(json.node);
+                    final Map<String, AttributeValue> attributesMap = new HashMap<>(sourceMap.size());
+                    for (Map.Entry<String, Object> e : sourceMap.entrySet()) {
+                        //Ignoring null & empty strings and keys starting with __
+                        if (e.getValue() != null &&
+                                (!(e.getValue() instanceof String) || e.getValue() != "") &&
+                                e.getKey() != null && !e.getKey().startsWith("__")) {
+                            attributesMap.put(primitiveAsString(e.getKey()), toAttributeValueSchemaless(e.getValue()));
+                        }
+                    }
+                    return AttributeValue.fromM(attributesMap);
+                } else {
+                    return AttributeValue.fromS((String) value);
+                }
+            } catch (IOException e) {
+                throw new DataException("Unsupported Set element type: " + e.getMessage());
+            }
         }
         if (value instanceof byte[] || value instanceof ByteBuffer) {
-            return new AttributeValue().withB(toByteBuffer(value));
+            return AttributeValue.fromB(toByteBuffer(value));
         }
         if (value instanceof List) {
             // We could have treated it as NS/BS/SS if the list is homogeneous and a compatible type, but can't know for ane empty list
-            return new AttributeValue().withL(
-                    ((List<?>) value).stream()
-                            .map(AttributeValueConverter::toAttributeValueSchemaless)
-                            .collect(Collectors.toList())
-            );
+            return AttributeValue.fromL(((List<?>) value).stream().map(AttributeValueConverter::toAttributeValueSchemaless).collect(Collectors.toList()));
         }
         if (value instanceof Set) {
-            final Set<?> set = (Set) value;
+            final Set<?> set = (Set<?>) value;
             if (set.isEmpty()) {
                 return NULL_VALUE;
             }
-            final Object firstItem = ((Iterator) set.iterator()).next();
+            final Object firstItem = ((Iterator<?>) set.iterator()).next();
             if (firstItem instanceof String) {
-                return new AttributeValue().withSS((Set<String>) set);
+                return AttributeValue.fromSs(set.stream().map(Object::toString).collect(Collectors.toList()));
             }
             if (firstItem instanceof Number) {
-                return new AttributeValue().withNS(set.stream().map(Object::toString).collect(Collectors.toSet()));
+                return AttributeValue.fromNs(set.stream().map(Object::toString).collect(Collectors.toList()));
             }
             if (firstItem instanceof byte[] || firstItem instanceof ByteBuffer) {
-                return new AttributeValue().withBS(set.stream().map(AttributeValueConverter::toByteBuffer).collect(Collectors.toSet()));
+                return AttributeValue.fromBs(set.stream().map(AttributeValueConverter::toByteBuffer).collect(Collectors.toList()));
             }
             throw new DataException("Unsupported Set element type: " + firstItem.getClass());
         }
         if (value instanceof Map) {
-            final Map<?, ?> sourceMap = (Map) value;
+            final Map<?, ?> sourceMap = (Map<?, ?>) value;
             final Map<String, AttributeValue> attributesMap = new HashMap<>(sourceMap.size());
             for (Map.Entry<?, ?> e : sourceMap.entrySet()) {
                 //Ignoring null & empty strings and keys starting with __
-                if(e.getValue() != null && (!(e.getValue() instanceof String) || e.getValue() != "") &&
-                        e.getKey() != null &&(!(e.getKey() instanceof String) || !((String) e.getKey()).startsWith("__"))) {
-                    attributesMap.put(
-                            primitiveAsString(e.getKey()),
-                            toAttributeValueSchemaless(e.getValue())
-                    );
+                if (e.getValue() != null && (!(e.getValue() instanceof String) || e.getValue() != "") && e.getKey() != null && (!(e.getKey() instanceof String) || !((String) e.getKey()).startsWith("__"))) {
+                    attributesMap.put(primitiveAsString(e.getKey()), toAttributeValueSchemaless(e.getValue()));
                 }
             }
-            return new AttributeValue().withM(attributesMap);
+            return AttributeValue.fromM(attributesMap);
         }
         throw new DataException("Unsupported value type: " + value.getClass());
     }
@@ -178,14 +180,17 @@ public class AttributeValueConverter {
         throw new DataException("Not a primitive: " + value.getClass());
     }
 
-    private static ByteBuffer toByteBuffer(Object bytesValue) {
+    private static SdkBytes toByteBuffer(Object bytesValue) {
         if (bytesValue instanceof byte[]) {
-            return ByteBuffer.wrap((byte[]) bytesValue);
+            return SdkBytes.fromByteArray((byte[]) bytesValue);
         } else if (bytesValue instanceof ByteBuffer) {
-            return ((ByteBuffer) bytesValue);
+            return SdkBytes.fromByteBuffer((ByteBuffer) bytesValue);
         } else {
             throw new DataException("Invalid bytes value of type: " + bytesValue.getClass());
         }
+    }
+
+    private AttributeValueConverter() {
     }
 
 }

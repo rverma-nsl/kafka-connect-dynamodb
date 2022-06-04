@@ -17,8 +17,8 @@
 package dynamok.sink;
 
 import com.codahale.metrics.Gauge;
-import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.jmx.JmxReporter;
 import dynamok.Version;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.connect.connector.Task;
@@ -30,7 +30,7 @@ import java.util.Map;
 
 public class DynamoDbSinkConnector extends SinkConnector {
 
-    static final MetricRegistry metricRegistry = new MetricRegistry();
+    static final MetricRegistry METRIC_REGISTRY = new MetricRegistry();
 
     private Map<String, String> props;
     private JmxReporter jmxReporter;
@@ -43,13 +43,13 @@ public class DynamoDbSinkConnector extends SinkConnector {
     public void start(Map<String, String> props) {
         this.props = props;
         // Starting JMX reporting
-        jmxReporter = JmxReporter.forRegistry(metricRegistry).inDomain("dynamo-connect").build();
+        jmxReporter = JmxReporter.forRegistry(METRIC_REGISTRY).inDomain("dynamo-connect").build();
         jmxReporter.start();
     }
 
     @Override
     public List<Map<String, String>> taskConfigs(int maxTasks) {
-        metricRegistry.register(MetricRegistry.name(DynamoDbSinkConnector.class, "taskDefinition"),
+        METRIC_REGISTRY.register(MetricRegistry.name(DynamoDbSinkConnector.class, "taskDefinition"),
                 (Gauge<String>) () -> props.toString());
         return Collections.nCopies(maxTasks, props);
     }
