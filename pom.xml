@@ -139,4 +139,11 @@
             </plugin>
         </plugins>
     </build>
+    <distributionManagement>
+        <repository>
+            <id>github</id>
+            <name>GitHub Packages</name>
+            <url>https://maven.pkg.github.com/rverma-nsl/kafka-connect-dynamodb</url>
+        </repository>
+    </distributionManagement>
 </project>
