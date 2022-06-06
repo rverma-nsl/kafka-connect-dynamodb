@@ -7,6 +7,5 @@
     "table.format": "TransRequest=test",
     "region": "ap-south-1",
     "ignore.record.key": true
-
   }
 }

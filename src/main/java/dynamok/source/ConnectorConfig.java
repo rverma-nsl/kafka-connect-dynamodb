@@ -16,71 +16,101 @@
 
 package dynamok.source;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 import software.amazon.awssdk.regions.Region;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-
 class ConnectorConfig extends AbstractConfig {
 
-    private enum Keys {
-        ;
-        static final String REGION = "region";
-        static final String ACCESS_KEY_ID = "access.key.id";
-        static final String SECRET_KEY = "secret.key";
-        static final String TABLES_PREFIX = "tables.prefix";
-        static final String TABLES_WHITELIST = "tables.whitelist";
-        static final String TABLES_BLACKLIST = "tables.blacklist";
-        static final String TOPIC_FORMAT = "topic.format";
-    }
-
-    static final ConfigDef CONFIG_DEF = new ConfigDef()
-            .define(Keys.REGION, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE, (key, regionName) -> {
-                if (Region.regions().stream().noneMatch(x -> x.id().equals(regionName))) {
-                    throw new ConfigException("Invalid AWS region: " + regionName);
+  static final ConfigDef CONFIG_DEF =
+      new ConfigDef()
+          .define(
+              Keys.REGION,
+              ConfigDef.Type.STRING,
+              ConfigDef.NO_DEFAULT_VALUE,
+              (String key, Object regionName) -> {
+                if (Region.regions().stream()
+                    .noneMatch(x -> x.id().equals(regionName))) {
+                  throw new ConfigException("Invalid AWS region: " + regionName);
                 }
-            }, ConfigDef.Importance.HIGH, "AWS region for DynamoDB.")
-            .define(Keys.ACCESS_KEY_ID, ConfigDef.Type.PASSWORD, "",
-                    ConfigDef.Importance.LOW, "Explicit AWS access key ID. " +
-                            "Leave empty to utilize the default credential provider chain.")
-            .define(Keys.SECRET_KEY, ConfigDef.Type.PASSWORD, "",
-                    ConfigDef.Importance.LOW, "Explicit AWS secret access key. " +
-                            "Leave empty to utilize the default credential provider chain.")
-            .define(Keys.TABLES_PREFIX, ConfigDef.Type.STRING, "",
-                    ConfigDef.Importance.MEDIUM, "Prefix for DynamoDB tables to source from.")
-            .define(Keys.TABLES_WHITELIST, ConfigDef.Type.LIST, Collections.emptyList(),
-                    ConfigDef.Importance.MEDIUM, "Whitelist for DynamoDB tables to source from.")
-            .define(Keys.TABLES_BLACKLIST, ConfigDef.Type.LIST, Collections.emptyList(),
-                    ConfigDef.Importance.MEDIUM, "Blacklist for DynamoDB tables to source from.")
-            .define(Keys.TOPIC_FORMAT, ConfigDef.Type.STRING, "${table}",
-                    ConfigDef.Importance.HIGH, "Format string for destination Kafka topic, use ``${table}`` as placeholder for source table name.");
+              },
+              ConfigDef.Importance.HIGH,
+              "AWS region for DynamoDB.")
+          .define(
+              Keys.ACCESS_KEY_ID,
+              ConfigDef.Type.PASSWORD,
+              "",
+              ConfigDef.Importance.LOW,
+              "Explicit AWS access key ID. "
+                  + "Leave empty to utilize the default credential provider chain.")
+          .define(
+              Keys.SECRET_KEY,
+              ConfigDef.Type.PASSWORD,
+              "",
+              ConfigDef.Importance.LOW,
+              "Explicit AWS secret access key. "
+                  + "Leave empty to utilize the default credential provider chain.")
+          .define(
+              Keys.TABLES_PREFIX,
+              ConfigDef.Type.STRING,
+              "",
+              ConfigDef.Importance.MEDIUM,
+              "Prefix for DynamoDB tables to source from.")
+          .define(
+              Keys.TABLES_WHITELIST,
+              ConfigDef.Type.LIST,
+              Collections.emptyList(),
+              ConfigDef.Importance.MEDIUM,
+              "Whitelist for DynamoDB tables to source from.")
+          .define(
+              Keys.TABLES_BLACKLIST,
+              ConfigDef.Type.LIST,
+              Collections.emptyList(),
+              ConfigDef.Importance.MEDIUM,
+              "Blacklist for DynamoDB tables to source from.")
+          .define(
+              Keys.TOPIC_FORMAT,
+              ConfigDef.Type.STRING,
+              "${table}",
+              ConfigDef.Importance.HIGH,
+              "Format string for destination Kafka topic, use ``${table}`` as"
+                  + " placeholder for source table name.");
+  final Region region;
+  final Password accessKeyId;
+  final Password secretKey;
+  final String topicFormat;
+  final String tablesPrefix;
+  final List<String> tablesWhitelist;
+  final List<String> tablesBlacklist;
 
-    final Region region;
-    final Password accessKeyId;
-    final Password secretKey;
-    final String topicFormat;
-    final String tablesPrefix;
-    final List<String> tablesWhitelist;
-    final List<String> tablesBlacklist;
+  ConnectorConfig(Map<String, String> props) {
+    super(CONFIG_DEF, props);
+    region = Region.of(getString(Keys.REGION));
+    accessKeyId = getPassword(Keys.ACCESS_KEY_ID);
+    secretKey = getPassword(Keys.SECRET_KEY);
+    tablesPrefix = getString(Keys.TABLES_PREFIX);
+    tablesWhitelist = getList(Keys.TABLES_WHITELIST);
+    tablesBlacklist = getList(Keys.TABLES_BLACKLIST);
+    topicFormat = getString(Keys.TOPIC_FORMAT);
+  }
 
-    ConnectorConfig(Map<String, String> props) {
-        super(CONFIG_DEF, props);
-        region = Region.of(getString(Keys.REGION));
-        accessKeyId = getPassword(Keys.ACCESS_KEY_ID);
-        secretKey = getPassword(Keys.SECRET_KEY);
-        tablesPrefix = getString(Keys.TABLES_PREFIX);
-        tablesWhitelist = getList(Keys.TABLES_WHITELIST);
-        tablesBlacklist = getList(Keys.TABLES_BLACKLIST);
-        topicFormat = getString(Keys.TOPIC_FORMAT);
-    }
+  public static void main(String... args) {
+    System.out.println(CONFIG_DEF.toRst());
+  }
 
-    public static void main(String... args) {
-        System.out.println(CONFIG_DEF.toRst());
-    }
-
+  private enum Keys {
+    ;
+    static final String REGION = "region";
+    static final String ACCESS_KEY_ID = "access.key.id";
+    static final String SECRET_KEY = "secret.key";
+    static final String TABLES_PREFIX = "tables.prefix";
+    static final String TABLES_WHITELIST = "tables.whitelist";
+    static final String TABLES_BLACKLIST = "tables.blacklist";
+    static final String TOPIC_FORMAT = "topic.format";
+  }
 }

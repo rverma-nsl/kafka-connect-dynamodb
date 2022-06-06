@@ -16,101 +16,200 @@
 
 package dynamok.sink;
 
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 import software.amazon.awssdk.regions.Region;
 
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-
 class ConnectorConfig extends AbstractConfig {
 
-    private enum Keys {
-        ;
-        static final String REGION = "region";
-        static final String ACCESS_KEY_ID = "access.key.id";
-        static final String SECRET_KEY = "secret.key";
-        static final String TABLE_FORMAT = "table.format";
-        static final String BATCH_SIZE = "batch.size";
-        static final String KAFKA_ATTRIBUTES = "kafka.attributes";
-        static final String IGNORE_RECORD_KEY = "ignore.record.key";
-        static final String IGNORE_RECORD_VALUE = "ignore.record.value";
-        static final String TOP_KEY_ATTRIBUTE = "top.key.attribute";
-        static final String TOP_VALUE_ATTRIBUTE = "top.value.attribute";
-        static final String MAX_RETRIES = "max.retries";
-        static final String RETRY_BACKOFF_MS = "retry.backoff.ms";
-        static final String BROKER = "broker";
-        static final String ERROR_KAFKA_TOPIC = "error.kafka.topic";
+  static final ConfigDef CONFIG_DEF =
+      new ConfigDef()
+          .define(
+              Keys.REGION,
+              ConfigDef.Type.STRING,
+              ConfigDef.NO_DEFAULT_VALUE,
+              (String key, Object regionName) -> {
+                if (Region.regions().stream()
+                    .noneMatch(x -> x.id().equals(regionName))) {
+                  throw new ConfigException("Invalid AWS region: " + regionName);
+                }
+              },
+              ConfigDef.Importance.HIGH,
+              "AWS region for DynamoDB.")
+          .define(
+              Keys.ACCESS_KEY_ID,
+              ConfigDef.Type.PASSWORD,
+              "",
+              ConfigDef.Importance.LOW,
+              "Explicit AWS access key ID. "
+                  + "Leave empty to utilize the default credential provider chain.")
+          .define(
+              Keys.SECRET_KEY,
+              ConfigDef.Type.PASSWORD,
+              "",
+              ConfigDef.Importance.LOW,
+              "Explicit AWS secret access key. "
+                  + "Leave empty to utilize the default credential provider chain.")
+          .define(
+              Keys.TABLE_FORMAT,
+              ConfigDef.Type.STRING,
+              "table=topic",
+              (String key, Object tables) -> {
+                for (String spl : tables.toString().split(",")) {
+                  String[] e = spl.split("=");
+                  if (e.length != 2) {
+                    throw new ConfigException(
+                        "Configuration tableFormat excepts topic=tablename format");
+                  }
+                }
+              },
+              ConfigDef.Importance.HIGH,
+              "Format string for destination DynamoDB table name, "
+                  + "use topic=tableName comma separated")
+          .define(
+              Keys.BATCH_SIZE,
+              ConfigDef.Type.INT,
+              1,
+              ConfigDef.Range.between(1, 25),
+              ConfigDef.Importance.HIGH,
+              "Batch size between 1 (dedicated ``PutItemRequest`` for each record)"
+                  + " and 25 (which is the maximum number of items in a ``BatchWriteItemRequest``)")
+          .define(
+              Keys.KAFKA_ATTRIBUTES,
+              ConfigDef.Type.LIST,
+              "kafka_topic,kafka_partition,kafka_offset",
+              (String key, Object names) -> {
+                final List<?> namesList = (List<?>) names;
+                if (!namesList.isEmpty() && namesList.size() != 3) {
+                  throw new ConfigException(
+                      Keys.KAFKA_ATTRIBUTES,
+                      "Must be empty or contain exactly 3 attribute names mapping to the topic, "
+                          + "partition and offset, but was: "
+                          + namesList);
+                }
+              },
+              ConfigDef.Importance.HIGH,
+              "Trio of ``topic,partition,offset`` attribute names to include in "
+                  + "records, set to empty to omit these attributes.")
+          .define(
+              Keys.IGNORE_RECORD_KEY,
+              ConfigDef.Type.BOOLEAN,
+              false,
+              ConfigDef.Importance.MEDIUM,
+              "Whether to ignore Kafka record keys in preparing the DynamoDB record.")
+          .define(
+              Keys.IGNORE_RECORD_VALUE,
+              ConfigDef.Type.BOOLEAN,
+              false,
+              ConfigDef.Importance.MEDIUM,
+              "Whether to ignore Kafka record value in preparing the DynamoDB record.")
+          .define(
+              Keys.TOP_KEY_ATTRIBUTE,
+              ConfigDef.Type.STRING,
+              "",
+              ConfigDef.Importance.MEDIUM,
+              "DynamoDB attribute name to use for the record key. "
+                  + "Leave empty if no top-level envelope attribute is desired.")
+          .define(
+              Keys.TOP_VALUE_ATTRIBUTE,
+              ConfigDef.Type.STRING,
+              "",
+              ConfigDef.Importance.MEDIUM,
+              "DynamoDB attribute name to use for the record value. "
+                  + "Leave empty if no top-level envelope attribute is desired.")
+          .define(
+              Keys.MAX_RETRIES,
+              ConfigDef.Type.INT,
+              10,
+              ConfigDef.Importance.MEDIUM,
+              "The maximum number of times to retry on errors before failing the task.")
+          .define(
+              Keys.RETRY_BACKOFF_MS,
+              ConfigDef.Type.INT,
+              3000,
+              ConfigDef.Importance.MEDIUM,
+              "The time in milliseconds to wait following an error before a retry attempt is made.")
+          .define(
+              Keys.BROKER,
+              ConfigDef.Type.STRING,
+              ConfigDef.NO_DEFAULT_VALUE,
+              ConfigDef.Importance.HIGH,
+              "Brokers address where Kafka error pipeline will work.")
+          .define(
+              Keys.ERROR_KAFKA_TOPIC,
+              ConfigDef.Type.STRING,
+              ConfigDef.NO_DEFAULT_VALUE,
+              ConfigDef.Importance.HIGH,
+              "Error kafka topic name.");
+  final Region region;
+  final Password accessKeyId;
+  final Password secretKey;
+  final String tableFormat;
+  final int batchSize;
+  final KafkaCoordinateNames kafkaCoordinateNames;
+  final boolean ignoreRecordKey;
+  final boolean ignoreRecordValue;
+  final String topKeyAttribute;
+  final String topValueAttribute;
+  final int maxRetries;
+  final int retryBackoffMs;
+  final String broker;
+  final String errorKafkaTopic;
+
+  ConnectorConfig(ConfigDef config, Map<String, String> parsedConfig) {
+    super(config, parsedConfig);
+    region = Region.of(getString(Keys.REGION));
+    accessKeyId = getPassword(Keys.ACCESS_KEY_ID);
+    secretKey = getPassword(Keys.SECRET_KEY);
+    tableFormat = getString(Keys.TABLE_FORMAT);
+    batchSize = getInt(Keys.BATCH_SIZE);
+    kafkaCoordinateNames = kafkaCoordinateNamesFromConfig(getList(Keys.KAFKA_ATTRIBUTES));
+    ignoreRecordKey = getBoolean(Keys.IGNORE_RECORD_KEY);
+    ignoreRecordValue = getBoolean(Keys.IGNORE_RECORD_VALUE);
+    topKeyAttribute = getString(Keys.TOP_KEY_ATTRIBUTE);
+    topValueAttribute = getString(Keys.TOP_VALUE_ATTRIBUTE);
+    maxRetries = getInt(Keys.MAX_RETRIES);
+    retryBackoffMs = getInt(Keys.RETRY_BACKOFF_MS);
+    broker = getString(Keys.BROKER);
+    errorKafkaTopic = getString(Keys.ERROR_KAFKA_TOPIC);
+  }
+
+  ConnectorConfig(Map<String, String> props) {
+    this(CONFIG_DEF, props);
+  }
+
+  private static KafkaCoordinateNames kafkaCoordinateNamesFromConfig(List<String> names) {
+    if (names.isEmpty()) {
+      return null;
     }
+    final Iterator<String> it = names.iterator();
+    return new KafkaCoordinateNames(it.next(), it.next(), it.next());
+  }
 
-    static final ConfigDef CONFIG_DEF = new ConfigDef().define(Keys.REGION, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE, (key, regionName) -> {
-        if (Region.regions().stream().noneMatch(x -> x.id().equals(regionName))) {
-            throw new ConfigException("Invalid AWS region: " + regionName);
-        }
-    }, ConfigDef.Importance.HIGH, "AWS region for DynamoDB.").define(Keys.ACCESS_KEY_ID, ConfigDef.Type.PASSWORD, "", ConfigDef.Importance.LOW, "Explicit AWS access key ID. " + "Leave empty to utilize the default credential provider chain.").define(Keys.SECRET_KEY, ConfigDef.Type.PASSWORD, "", ConfigDef.Importance.LOW, "Explicit AWS secret access key. " + "Leave empty to utilize the default credential provider chain.").define(Keys.TABLE_FORMAT, ConfigDef.Type.STRING, "table=topic", (key, tables) -> {
-        for (String spl : tables.toString().split(",")) {
-            String[] e = spl.split("=");
-            if (e.length != 2) {
-                throw new ConfigException("Configuration tableFormat excepts topic=tablename format");
-            }
-        }
-    }, ConfigDef.Importance.HIGH, "Format string for destination DynamoDB table name, use topic=tableName comma separated").define(Keys.BATCH_SIZE, ConfigDef.Type.INT, 1, ConfigDef.Range.between(1, 25), ConfigDef.Importance.HIGH, "Batch size between 1 (dedicated ``PutItemRequest`` for each record) and 25 (which is the maximum number of items in a ``BatchWriteItemRequest``)").define(Keys.KAFKA_ATTRIBUTES, ConfigDef.Type.LIST, "kafka_topic,kafka_partition,kafka_offset", (key, names) -> {
-        final List<?> namesList = (List<?>) names;
-        if (!namesList.isEmpty() && namesList.size() != 3) {
-            throw new ConfigException(Keys.KAFKA_ATTRIBUTES, "Must be empty or contain exactly 3 attribute names mapping to the topic, partition and offset, but was: " + namesList);
-        }
-    }, ConfigDef.Importance.HIGH, "Trio of ``topic,partition,offset`` attribute names to include in records, set to empty to omit these attributes.").define(Keys.IGNORE_RECORD_KEY, ConfigDef.Type.BOOLEAN, false, ConfigDef.Importance.MEDIUM, "Whether to ignore Kafka record keys in preparing the DynamoDB record.").define(Keys.IGNORE_RECORD_VALUE, ConfigDef.Type.BOOLEAN, false, ConfigDef.Importance.MEDIUM, "Whether to ignore Kafka record value in preparing the DynamoDB record.").define(Keys.TOP_KEY_ATTRIBUTE, ConfigDef.Type.STRING, "", ConfigDef.Importance.MEDIUM, "DynamoDB attribute name to use for the record key. " + "Leave empty if no top-level envelope attribute is desired.").define(Keys.TOP_VALUE_ATTRIBUTE, ConfigDef.Type.STRING, "", ConfigDef.Importance.MEDIUM, "DynamoDB attribute name to use for the record value. " + "Leave empty if no top-level envelope attribute is desired.").define(Keys.MAX_RETRIES, ConfigDef.Type.INT, 10, ConfigDef.Importance.MEDIUM, "The maximum number of times to retry on errors before failing the task.").define(Keys.RETRY_BACKOFF_MS, ConfigDef.Type.INT, 3000, ConfigDef.Importance.MEDIUM, "The time in milliseconds to wait following an error before a retry attempt is made.").define(Keys.BROKER, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE, ConfigDef.Importance.HIGH, "Brokers address where Kafka error pipeline will work.").define(Keys.ERROR_KAFKA_TOPIC, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE, ConfigDef.Importance.HIGH, "Error kafka topic name.");
+  public static void main(String... args) {
+    System.out.println(CONFIG_DEF.toRst());
+  }
 
-    final Region region;
-    final Password accessKeyId;
-    final Password secretKey;
-    final String tableFormat;
-    final int batchSize;
-    final KafkaCoordinateNames kafkaCoordinateNames;
-    final boolean ignoreRecordKey;
-    final boolean ignoreRecordValue;
-    final String topKeyAttribute;
-    final String topValueAttribute;
-    final int maxRetries;
-    final int retryBackoffMs;
-    final String broker;
-    final String errorKafkaTopic;
-
-    ConnectorConfig(ConfigDef config, Map<String, String> parsedConfig) {
-        super(config, parsedConfig);
-        region = Region.of(getString(Keys.REGION));
-        accessKeyId = getPassword(Keys.ACCESS_KEY_ID);
-        secretKey = getPassword(Keys.SECRET_KEY);
-        tableFormat = getString(Keys.TABLE_FORMAT);
-        batchSize = getInt(Keys.BATCH_SIZE);
-        kafkaCoordinateNames = kafkaCoordinateNamesFromConfig(getList(Keys.KAFKA_ATTRIBUTES));
-        ignoreRecordKey = getBoolean(Keys.IGNORE_RECORD_KEY);
-        ignoreRecordValue = getBoolean(Keys.IGNORE_RECORD_VALUE);
-        topKeyAttribute = getString(Keys.TOP_KEY_ATTRIBUTE);
-        topValueAttribute = getString(Keys.TOP_VALUE_ATTRIBUTE);
-        maxRetries = getInt(Keys.MAX_RETRIES);
-        retryBackoffMs = getInt(Keys.RETRY_BACKOFF_MS);
-        broker = getString(Keys.BROKER);
-        errorKafkaTopic = getString(Keys.ERROR_KAFKA_TOPIC);
-    }
-
-    ConnectorConfig(Map<String, String> props) {
-        this(CONFIG_DEF, props);
-    }
-
-    private static KafkaCoordinateNames kafkaCoordinateNamesFromConfig(List<String> names) {
-        if (names.isEmpty()) {
-            return null;
-        }
-        final Iterator<String> it = names.iterator();
-        return new KafkaCoordinateNames(it.next(), it.next(), it.next());
-    }
-
-    public static void main(String... args) {
-        System.out.println(CONFIG_DEF.toRst());
-    }
-
+  private enum Keys {
+    ;
+    static final String REGION = "region";
+    static final String ACCESS_KEY_ID = "access.key.id";
+    static final String SECRET_KEY = "secret.key";
+    static final String TABLE_FORMAT = "table.format";
+    static final String BATCH_SIZE = "batch.size";
+    static final String KAFKA_ATTRIBUTES = "kafka.attributes";
+    static final String IGNORE_RECORD_KEY = "ignore.record.key";
+    static final String IGNORE_RECORD_VALUE = "ignore.record.value";
+    static final String TOP_KEY_ATTRIBUTE = "top.key.attribute";
+    static final String TOP_VALUE_ATTRIBUTE = "top.value.attribute";
+    static final String MAX_RETRIES = "max.retries";
+    static final String RETRY_BACKOFF_MS = "retry.backoff.ms";
+    static final String BROKER = "broker";
+    static final String ERROR_KAFKA_TOPIC = "error.kafka.topic";
+  }
 }

@@ -16,27 +16,30 @@
 
 package dynamok.sink;
 
-import software.amazon.awssdk.services.dynamodb.model.WriteRequest;
-
 import java.util.List;
 import java.util.Map;
+import software.amazon.awssdk.services.dynamodb.model.WriteRequest;
 
 public class UnprocessedItemsException extends Exception {
 
-    public final Map<String, List<WriteRequest>> unprocessedItems;
+  public final Map<String, List<WriteRequest>> unprocessedItems;
 
-    public UnprocessedItemsException(Map<String, List<WriteRequest>> unprocessedItems) {
-        super(makeMessage(unprocessedItems));
-        this.unprocessedItems = unprocessedItems;
+  public UnprocessedItemsException(Map<String, List<WriteRequest>> unprocessedItems) {
+    super(makeMessage(unprocessedItems));
+    this.unprocessedItems = unprocessedItems;
+  }
+
+  private static String makeMessage(Map<String, List<WriteRequest>> unprocessedItems) {
+    final StringBuilder msg = new StringBuilder("Unprocessed writes: {");
+    for (Map.Entry<String, List<WriteRequest>> e : unprocessedItems.entrySet()) {
+      msg.append(" ")
+          .append(e.getKey())
+          .append("(")
+          .append(e.getValue().size())
+          .append(")")
+          .append(" ");
     }
-
-    private static String makeMessage(Map<String, List<WriteRequest>> unprocessedItems) {
-        final StringBuilder msg = new StringBuilder("Unprocessed writes: {");
-        for (Map.Entry<String, List<WriteRequest>> e : unprocessedItems.entrySet()) {
-            msg.append(" ").append(e.getKey()).append("(").append(e.getValue().size()).append(")").append(" ");
-        }
-        msg.append("}");
-        return msg.toString();
-    }
-
+    msg.append("}");
+    return msg.toString();
+  }
 }

@@ -20,53 +20,53 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.jmx.JmxReporter;
 import dynamok.Version;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.connect.connector.Task;
 import org.apache.kafka.connect.sink.SinkConnector;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-
 public class DynamoDbSinkConnector extends SinkConnector {
 
-    static final MetricRegistry METRIC_REGISTRY = new MetricRegistry();
+  static final MetricRegistry METRIC_REGISTRY = new MetricRegistry();
 
-    private Map<String, String> props;
-    private JmxReporter jmxReporter;
-    @Override
-    public Class<? extends Task> taskClass() {
-        return DynamoDbSinkTask.class;
-    }
+  private Map<String, String> props;
+  private JmxReporter jmxReporter;
 
-    @Override
-    public void start(Map<String, String> props) {
-        this.props = props;
-        // Starting JMX reporting
-        jmxReporter = JmxReporter.forRegistry(METRIC_REGISTRY).inDomain("dynamo-connect").build();
-        jmxReporter.start();
-    }
+  @Override
+  public Class<? extends Task> taskClass() {
+    return DynamoDbSinkTask.class;
+  }
 
-    @Override
-    public List<Map<String, String>> taskConfigs(int maxTasks) {
-        METRIC_REGISTRY.register(MetricRegistry.name(DynamoDbSinkConnector.class, "taskDefinition"),
-                (Gauge<String>) () -> props.toString());
-        return Collections.nCopies(maxTasks, props);
-    }
+  @Override
+  public void start(Map<String, String> props) {
+    this.props = props;
+    // Starting JMX reporting
+    jmxReporter = JmxReporter.forRegistry(METRIC_REGISTRY).inDomain("dynamo-connect").build();
+    jmxReporter.start();
+  }
 
-    @Override
-    public void stop() {
-        jmxReporter.stop();
-    }
+  @Override
+  public List<Map<String, String>> taskConfigs(int maxTasks) {
+    METRIC_REGISTRY.register(
+        MetricRegistry.name(DynamoDbSinkConnector.class, "taskDefinition"),
+        (Gauge<String>) () -> props.toString());
+    return Collections.nCopies(maxTasks, props);
+  }
 
-    @Override
-    public ConfigDef config() {
-        return ConnectorConfig.CONFIG_DEF;
-    }
+  @Override
+  public void stop() {
+    jmxReporter.stop();
+  }
 
-    @Override
-    public String version() {
-        return Version.get();
-    }
+  @Override
+  public ConfigDef config() {
+    return ConnectorConfig.CONFIG_DEF;
+  }
 
+  @Override
+  public String version() {
+    return Version.get();
+  }
 }

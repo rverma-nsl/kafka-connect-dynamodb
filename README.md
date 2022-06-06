@@ -4,7 +4,8 @@ This repository contains a sample project that can be used to start off your own
 
 ## Building the connector
 
-The first thing you need to do to start using this connector is built it. To do that, you need to install the following dependencies:
+The first thing you need to do to start using this connector is built it. To do that, you need to install the following
+dependencies:
 
 - [Java 11+](https://openjdk.java.net/)
 - [Apache Maven](https://maven.apache.org/)
