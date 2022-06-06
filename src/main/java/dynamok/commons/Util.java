@@ -45,6 +45,7 @@ public final class Util {
         return new ValidJson(MAPPER.readTree(json), true);
       }
     } catch (JacksonException ignored) {
+      return new ValidJson(null, false);
     }
     return new ValidJson(null, false);
   }

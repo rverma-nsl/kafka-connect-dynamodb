@@ -105,6 +105,7 @@
                     <violationSeverity>warning</violationSeverity>
                     <encoding>${project.build.sourceEncoding}</encoding>
                     <configLocation>google_checks.xml</configLocation>
+                    <suppressionsLocation>checkstyle/suppression.xml</suppressionsLocation>
                     <consoleOutput>true</consoleOutput>
                 </configuration>
                 <executions>
